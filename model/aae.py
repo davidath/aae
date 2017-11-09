@@ -2,60 +2,76 @@
 # Description
 ###############################################################################
 
-#!/usr/bin/env python
-import sys
+import lasagne
+import lasagne.layers as ll
+import numpy as np
+import theano.tensor as T
+import utils
+from modeltemplate import Model
 
-def load_data(cp, train):
-    log('Loading data........')
-    # If 'input file' parameter not defined then assume MNIST dataset
-    if cp.get('Experiment', 'inputfile') == '':
-        # Get FULL dataset containing both training/testing
-        # In this experiment MNIST used as a testing mechanism in order to
-        # test the connection between layers, availabilty,etc. and not for
-        # hyperparameter tweaking.
-        [X1, labels1] = utils.load_mnist(
-            dataset='training', path=MNIST_PATH)
-        [X2, labels2] = utils.load_mnist(
-            dataset='testing', path=MNIST_PATH)
-        X = np.concatenate((X1, X2), axis=0)
-        labels = np.concatenate((labels1, labels2), axis=0)
-        # Will dataset be used for training? then shuffle the dataset then use
-        # the same permutation for the labels.
-        if train == 'train':
-            p = np.random.permutation(X.shape[0])
-            X = X[p].astype(np.float32) * 0.02
-            labels = labels[p]
-            prefix = cp.get('Experiment', 'prefix')
-            num = cp.get('Experiment', 'num')
-            np.save(prefix + '_' + num + 'random_perm.npy', p)
-        return [X, labels]
-    # If 'input file' is specified then load inputfile, our script assumes that
-    # the input file will always be a numpy object
-    else:
-        try:
-            X = np.load(cp.get('Experiment', 'inputfile'))
-        except:
-            log('Input file must be a saved numpy object (*.npy)')
-        # Will dataset be used for training? then shuffle the dataset
-        if train == 'train':
-            p = np.random.permutation(X.shape[0])
-            X = X[p]
-            prefix = cp.get('Experiment', 'prefix')
-            num = cp.get('Experiment', 'num')
-            np.save(prefix + '_' + num + 'random_perm.npy', p)
-        return X
-    log('DONE........')
+# Stacking layers from config file
+def build_model(cp):
+    relu = lasagne.nonlinearities.rectify
+    linear = lasagne.nonlinearities.linear
+    sigmoid = lasagne.nonlinearities.sigmoid
+    act_dict = {'ReLU': relu, 'Linear': linear, 'Sigmoid': sigmoid}
+    # Begin stacking layers
+    # Input
+    input_layer = ae_network = ll.InputLayer(
+        shape=(None, cp.getint('AAE_Input', 'Width')), name='AAE_Input')
+    # Stack endoder layers
+    for sect in [i for i in cp.sections() if 'Encoder' in i]:
+        ae_network = ll.DenseLayer(incoming=ae_network,
+                                   num_units=cp.getint(sect, 'Width'),
+                                   W=lasagne.init.Normal(std=0.01), nonlinearity=act_dict[cp.get(sect, 'Activation')],
+                                   name=sect)
+        # Add generator flag that will be used in backward pass
+        ae_network.params[ae_network.W].add('generator')
+        ae_network.params[ae_network.b].add('generator')
+    # Latent variable Z layer also known as q(z|x)
+    ae_enc = ae_network = ll.DenseLayer(incoming=ae_network,
+                                        num_units=cp.getint('Z', 'Width'),
+                                        W=lasagne.init.Normal(std=0.01), nonlinearity=act_dict[cp.get('Z', 'Activation')],
+                                        name='Z')
+    # Add generator flag that will be used in backward pass
+    ae_enc.params[ae_enc.W].add('generator')
+    ae_enc.params[ae_enc.b].add('generator')
+    # ---- End of Encoder for AE and Generator for GAN ----
+    # Stack decoder layers
+    for sect in [i for i in cp.sections() if 'Decoder' in i]:
+        ae_network = ll.DenseLayer(incoming=ae_network,
+                                   num_units=cp.getint(sect, 'Width'),
+                                   W=lasagne.init.Normal(std=0.01), nonlinearity=act_dict[cp.get(sect, 'Activation')],
+                                   name=sect)
+    ae_out = ae_network = ll.DenseLayer(incoming=ae_network,
+                                        num_units=cp.getint(
+                                            'AAE_Output', 'Width'),
+                                        W=lasagne.init.Normal(std=0.01), nonlinearity=act_dict[cp.get('AAE_Output', 'Activation')],
+                                        name='AAE_Output')
+    # ---- End of Decoder for AE ----
+    prior_inp = ll.InputLayer(
+        shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
+    dis_in = dis_net = ll.ConcatLayer(
+        [ae_enc, prior_inp], axis=0, name='Dis_in')
+    # Stack discriminator layers
+    for sect in [i for i in cp.sections() if 'Discriminator' in i]:
+        dis_net = ll.DenseLayer(incoming=dis_net,
+                                num_units=cp.getint(sect, 'Width'),
+                                W=lasagne.init.Normal(std=0.01), nonlinearity=act_dict[cp.get(sect, 'Activation')],
+                                name=sect)
+        # Add generator flag that will be used in backward pass
+        dis_net.params[dis_net.W].add('discriminator')
+        dis_net.params[dis_net.b].add('discriminator')
+    dis_out = dis_net = ll.DenseLayer(incoming=dis_net,
+                                      num_units=cp.getint('Dout', 'Width'),
+                                      W=lasagne.init.Normal(std=0.01), nonlinearity=act_dict[cp.get('Dout', 'Activation')],
+                                      name='Dis_out')
+    dis_out.params[dis_out.W].add('discriminator')
+    dis_out.params[dis_out.b].add('discriminator')
+    aae = ll.get_all_layers([ae_out, dis_out])
+    layer_dict = {layer.name: layer for layer in aae}
+    return layer_dict, aae
 
-# Control flow
-def main(path, train):
-    cp = load_config(path)
-    # Check if MNIST dataset was loaded
-    try:
-        [X, labels] = load_data(cp, train)
-    except:
-        X = load_data(cp, train)
-    # Check training/testing flag
-    if train == 'train':
-        init(cp, X)
-    else:
-        pretrained(cp, X)
+# Create template of our model for testing,saving, etc.
+def make_template(layer_dict, aae):
+    return Model(layer_dict=layer_dict, aae=aae)
