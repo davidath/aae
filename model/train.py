@@ -1,13 +1,14 @@
+#!/usr/bin/env python
+
 ###############################################################################
 # Description
 ###############################################################################
 
-#!/usr/bin/env python
 import os
 # Removing/Adding comment enables/disables theano GPU support
-os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=gpu,floatX=float32,nvcc.flags=-D_FORCE_INLINES'
+# os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=gpu,floatX=float32,nvcc.flags=-D_FORCE_INLINES'
 # Removing/Adding comment forces/stops theano CPU support, usually used for model saving
-# os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
+os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
 
 import sys
 import ConfigParser
@@ -20,13 +21,13 @@ def log(s, label='INFO'):
     sys.stdout.flush()
 
 # Control flow
-def main(path, train):
-    cp = load_config(path)
+def main(path):
+    cp = utils.load_config(path)
     # Check if MNIST dataset was loaded
     try:
-        [X, labels] = utils.load_data(cp, train)
+        [X, labels] = utils.load_data_train(cp)
     except:
-        X = utils.load_data(cp, train)
+        X = utils.load_data_train(cp)
     init(cp, X)
 
 # Initialize neural network and train model
@@ -39,6 +40,9 @@ def train(cp, dataset):
     index = T.lscalar()
     # Building/Stacking layers
     [layer_dict, aae] = aae.build_model(cp)
+    # Get Theano functions for Objective
+    recon_loss = aae.reconstruction_loss(cp, input_var, layer_dict)
+    print recon_loss(0, cp.getint('hyperparameters','batchsize'), cp.getint('hyperparameters','learningrate'))
 
 
 from operator import attrgetter
@@ -51,5 +55,5 @@ if __name__ == "__main__":
                         help='config path file')
     opts = parser.parse_args()
     getter = attrgetter('input')
-    inp, train = getter(opts)
-    main(inp, train)
+    inp = getter(opts)
+    main(inp)

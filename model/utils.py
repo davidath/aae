@@ -9,6 +9,11 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import ConfigParser
+import sys
+from datetime import datetime
+
+MNIST_PATH = '.'
+
 
 def save(filename, *objects):
     # Save object and compress it at the same time (it can be used for multiple
@@ -104,37 +109,40 @@ def load_config(input_path):
     cp.read(input_path)
     return cp
 
-def load_data(cp, train):
+# Logging messages such as loss,loading,etc.
+def log(s, label='INFO'):
+    sys.stdout.write(label + ' [' + str(datetime.now()) + '] ' + str(s) + '\n')
+    sys.stdout.flush()
+
+def load_data_train(cp):
     log('Loading data........')
     # If 'input file' parameter not defined then assume MNIST dataset
-    if cp.get('Experiment', 'inputfile') == '':
+    if cp.get('Experiment', 'DataInputPath') == '':
         # Get FULL dataset containing both training/testing
         # In this experiment MNIST used as a testing mechanism in order to
         # test the connection between layers, availabilty,etc. and not for
         # hyperparameter tweaking.
-        [X1, labels1] = utils.load_mnist(
+        [X1, labels1] = load_mnist(
             dataset='training', path=MNIST_PATH)
         # Shuffle the dataset for training then use the same permutation for the labels.
         p = np.random.permutation(X.shape[0])
         X = X[p].astype(np.float32) * 0.02
         labels = labels[p]
         prefix = cp.get('Experiment', 'prefix')
-        num = cp.get('Experiment', 'num')
-        np.save(prefix + '_' + num + 'random_perm.npy', p)
+        np.save(prefix + '_' + 'random_perm.npy', p)
         return [X, labels]
     # If 'input file' is specified then load inputfile, our script assumes that
     # the input file will always be a numpy object
     else:
         try:
-            X = np.load(cp.get('Experiment', 'inputfile'))
+            X = np.load(cp.get('Experiment', 'DataInputPath'))
         except:
             log('Input file must be a saved numpy object (*.npy)')
         # Shuffle the dataset
         p = np.random.permutation(X.shape[0])
         X = X[p]
         prefix = cp.get('Experiment', 'prefix')
-        num = cp.get('Experiment', 'num')
-        np.save(prefix + '_' + num + 'random_perm.npy', p)
+        np.save(prefix + '_' + 'random_perm.npy', p)
         return X
     log('DONE........')
     log('Dataset shape: '+X.shape)

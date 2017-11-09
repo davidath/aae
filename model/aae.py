@@ -10,6 +10,8 @@ import utils
 from modeltemplate import Model
 
 # Stacking layers from config file
+
+
 def build_model(cp):
     relu = lasagne.nonlinearities.rectify
     linear = lasagne.nonlinearities.linear
@@ -73,5 +75,32 @@ def build_model(cp):
     return layer_dict, aae
 
 # Create template of our model for testing,saving, etc.
+
+
 def make_template(layer_dict, aae):
     return Model(layer_dict=layer_dict, aae=aae)
+
+
+def reconstruction_loss(cp, input_var, layer_dict):
+    learning_rate = T.scalar(name='learning_rate')
+    X_recon = ll.get_output(layer_dict['AAE_Output'])
+    recon_loss = lasagne.objectives.squared_error(X_recon,
+                                                  layer_dict['AAE_Input'].input_var)
+    recon_params = ll.get_all_params(layer_dict['AAE_Output'], trainable=True)
+    recon_updates = lasagne.updates.nesterov_momentum(
+        cost, params, learning_rate=learning_rate, momentum=cp.getint('hyperparameters', 'momentum'))
+    recon_func = theano.function(inputs=[index, batch_size, learning_rate],
+                                 outputs=recon_loss, updates=recon_updates,
+                                 givens={layer_dict['AAE_Input'].input_var: input_var[
+                                     index:index + batch_size, :]}
+                                 )
+    return recon_func
+
+# if __name__ == '__main__':
+#     cp = utils.load_config('../cfg/aae_default.ini')
+#     [layer_dict,aae] = build_model(cp)
+#     print('collected %d layers' % (len(layer_dict.keys())))
+#     for name in layer_dict:
+#         print('%s: %r' % (name, layer_dict[name]))
+#     print ll.get_all_params(layer_dict['AAE_Output'],trainable=True)
+#     print len(ll.get_all_params(layer_dict['AAE_Output'],trainable=True))
