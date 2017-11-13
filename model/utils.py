@@ -11,8 +11,12 @@ import matplotlib.pyplot as plt
 import ConfigParser
 import sys
 from datetime import datetime
+import os
+import struct
+from array import array as pyarray
+from numpy import append, array, int8, uint8, zeros
 
-MNIST_PATH = '.'
+MNIST_PATH = '../mnist'
 
 
 def save(filename, *objects):
@@ -20,7 +24,7 @@ def save(filename, *objects):
     # objects or a single object)
     fil = gzip.open(filename, 'wb')
     for obj in objects:
-        cPickle.dump(obj, fil,protocol=cPickle.HIGHEST_PROTOCOL)
+        cPickle.dump(obj, fil, protocol=cPickle.HIGHEST_PROTOCOL)
     fil.close()
 
 
@@ -42,6 +46,7 @@ def load_single(filename):
     fil.close()
     return c
 
+
 def plot_image(image, x, y):
     # Plot single image
     fig = plt.figure()
@@ -51,17 +56,20 @@ def plot_image(image, x, y):
     plt.plot()
     plt.show()
 
+
 def displayz(a, x, y, startind=0, sizex=12, sizey=12, CMAP=None):
     fig = plt.figure(figsize=(sizex, sizey))
     fig.subplots_adjust(hspace=0.01, wspace=0.05)
     for i in range(x * y):
-        sub = fig.add_subplot(x, y, i+1)
+        sub = fig.add_subplot(x, y, i + 1)
         # sub.imshow(a[startind+i,:,:], interpolation='nearest')
         if CMAP:
-            sub.imshow(a[startind+i,:,:], cmap=CMAP, interpolation='nearest')
+            sub.imshow(a[startind + i, :, :], cmap=CMAP,
+                       interpolation='nearest')
         else:
-            sub.imshow(a[startind+i,:,:], interpolation='nearest')
+            sub.imshow(a[startind + i, :, :], interpolation='nearest')
     plt.show()
+
 
 def load_mnist(dataset="training", digits=np.arange(10), path="."):
     """
@@ -110,12 +118,17 @@ def load_config(input_path):
     return cp
 
 # Logging messages such as loss,loading,etc.
+
+
 def log(s, label='INFO'):
     sys.stdout.write(label + ' [' + str(datetime.now()) + '] ' + str(s) + '\n')
     sys.stdout.flush()
 
+
 def load_data_train(cp):
     log('Loading data........')
+    out = cp.get('Experiment', 'ModelOutputPath')
+    num = cp.get('Experiment', 'Enumber')
     # If 'input file' parameter not defined then assume MNIST dataset
     if cp.get('Experiment', 'DataInputPath') == '':
         # Get FULL dataset containing both training/testing
@@ -124,12 +137,15 @@ def load_data_train(cp):
         # hyperparameter tweaking.
         [X1, labels1] = load_mnist(
             dataset='training', path=MNIST_PATH)
-        # Shuffle the dataset for training then use the same permutation for the labels.
-        p = np.random.permutation(X.shape[0])
-        X = X[p].astype(np.float32) * 0.02
-        labels = labels[p]
+        # Shuffle the dataset for training then use the same permutation for
+        # the labels.
+        p = np.random.permutation(X1.shape[0])
+        X = X1[p].astype(np.float32) * 0.02
+        labels = labels1[p]
         prefix = cp.get('Experiment', 'prefix')
-        np.save(prefix + '_' + 'random_perm.npy', p)
+        np.save(out + prefix + '_' + num + '_' + 'random_perm.npy', p)
+        log('DONE........')
+        log('Dataset shape: ' + str(X.shape))
         return [X, labels]
     # If 'input file' is specified then load inputfile, our script assumes that
     # the input file will always be a numpy object
@@ -142,7 +158,7 @@ def load_data_train(cp):
         p = np.random.permutation(X.shape[0])
         X = X[p]
         prefix = cp.get('Experiment', 'prefix')
-        np.save(prefix + '_' + 'random_perm.npy', p)
+        np.save(out + prefix +  '_' + num + '_' + 'random_perm.npy', p)
+        log('DONE........')
+        log('Dataset shape: ' + str(X.shape))
         return X
-    log('DONE........')
-    log('Dataset shape: '+X.shape)

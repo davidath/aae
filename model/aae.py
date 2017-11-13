@@ -5,6 +5,7 @@
 import lasagne
 import lasagne.layers as ll
 import numpy as np
+import theano
 import theano.tensor as T
 import utils
 from modeltemplate import Model
@@ -81,14 +82,26 @@ def make_template(layer_dict, aae):
     return Model(layer_dict=layer_dict, aae=aae)
 
 
+# Create autoencoder objective function also known as reconstruction loss
+
+
 def reconstruction_loss(cp, input_var, layer_dict):
+    # Scalar used for batch training
+    index = T.lscalar()
+    batch_size = T.lscalar()
+    # Scalar used for learning rate
     learning_rate = T.scalar(name='learning_rate')
+    # Get reconstructed input from AE
     X_recon = ll.get_output(layer_dict['AAE_Output'])
+    # MSE between real input and reconstructed input
     recon_loss = lasagne.objectives.squared_error(X_recon,
                                                   layer_dict['AAE_Input'].input_var)
+    recon_loss = recon_loss.mean()
+    # Update trainable parameters of AE
     recon_params = ll.get_all_params(layer_dict['AAE_Output'], trainable=True)
     recon_updates = lasagne.updates.nesterov_momentum(
-        cost, params, learning_rate=learning_rate, momentum=cp.getint('hyperparameters', 'momentum'))
+        recon_loss, recon_params, learning_rate=learning_rate, momentum=float(cp.get('Hyperparameters', 'momentum')))
+    # Reconstruction loss a.k.a Lrecon
     recon_func = theano.function(inputs=[index, batch_size, learning_rate],
                                  outputs=recon_loss, updates=recon_updates,
                                  givens={layer_dict['AAE_Input'].input_var: input_var[
@@ -96,11 +109,80 @@ def reconstruction_loss(cp, input_var, layer_dict):
                                  )
     return recon_func
 
-# if __name__ == '__main__':
-#     cp = utils.load_config('../cfg/aae_default.ini')
-#     [layer_dict,aae] = build_model(cp)
+# Create discriminator objective function also known as the cross entropy between prior
+# distribution p(z) and posterior estimate distribution q(z|x)
+
+
+def discriminator_loss(cp, input_var, layer_dict):
+    # Scalar used for batch training
+    index = T.lscalar()
+    batch_size = T.lscalar()
+    pz = T.fmatrix('pz')
+    # Scalar used for learning rate
+    learning_rate = T.scalar(name='learning_rate')
+    # Get discriminator output
+    dis_out = ll.get_output(layer_dict['Dis_out'])
+    # Fake/Real (0/1) labels for discriminator loss
+    dis_targets = T.vertical_stack(
+        T.zeros((batch_size, 1)),
+        T.ones((batch_size, 1))
+    )
+    # Cross entropy regularization term
+    dis_loss = T.nnet.binary_crossentropy(dis_out, dis_targets).mean()
+    # Train discriminator
+    dis_params = ll.get_all_params(
+        layer_dict['Dis_out'], trainable=True, discriminator=True)
+    dis_updates = lasagne.updates.nesterov_momentum(
+        dis_loss, dis_params, learning_rate=learning_rate, momentum=float(cp.get('Hyperparameters', 'momentum')))
+    # Theano function
+    Ldis_func = theano.function(inputs=[index, batch_size, learning_rate, pz],
+                                outputs=dis_loss, updates=dis_updates,
+                                givens={
+                                    layer_dict['AAE_Input'].input_var: input_var[index:index + batch_size, :],
+                                    layer_dict['pz_inp'].input_var: pz
+    }
+    )
+    return Ldis_func
+
+# Create generator objective function also known as the entropy of the posterior
+# estimate distribution q(z|x)
+
+
+def generator_loss(cp, input_var, layer_dict):
+    # Scalar used for batch training
+    index = T.lscalar()
+    batch_size = T.lscalar()
+    # Scalar used for learning rate
+    learning_rate = T.scalar(name='learning_rate')
+    # Get discriminator output without resampling from prior p(z)
+    gen_out = ll.get_output(layer_dict['Z'])
+    # Pass generator output to discriminator input
+    dis_out = ll.get_output(layer_dict['Dis_out'], inputs={
+                            layer_dict['Dis_in']: gen_out})
+    # Create generator targets
+    gen_targets = T.ones_like(dis_out.shape[0])
+    # Entropy regularization term
+    gen_loss = T.nnet.binary_crossentropy(dis_out, gen_targets).mean()
+    # Train generator
+    gen_params = ll.get_all_params(
+        layer_dict['Dis_out'], trainable=True, generator=True)
+    gen_updates = lasagne.updates.nesterov_momentum(
+        gen_loss, gen_params, learning_rate=learning_rate, momentum=float(cp.get('Hyperparameters', 'momentum')))
+    Lgen_func = theano.function(inputs=[index, batch_size, learning_rate],
+                                outputs=gen_loss, updates=gen_updates,
+                                givens={
+                                    layer_dict['AAE_Input'].input_var: input_var[index:index + batch_size, :]
+    }
+    )
+    return Lgen_func
+
+
+if __name__ == '__main__':
+    cp = utils.load_config('../cfg/aae_default.ini')
+    [layer_dict, aae] = build_model(cp)
 #     print('collected %d layers' % (len(layer_dict.keys())))
-#     for name in layer_dict:
+    for name in layer_dict:
+        print name, ll.get_output_shape(layer_dict[name])
 #         print('%s: %r' % (name, layer_dict[name]))
 #     print ll.get_all_params(layer_dict['AAE_Output'],trainable=True)
 #     print len(ll.get_all_params(layer_dict['AAE_Output'],trainable=True))
