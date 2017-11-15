@@ -17,12 +17,22 @@ import aae
 import theano
 import theano.tensor as T
 from datetime import datetime
+import time
+from tqdm import *
+
 # Logging messages such as loss,loading,etc.
 
 
 def log(s, label='INFO'):
     sys.stdout.write(label + ' [' + str(datetime.now()) + '] ' + str(s) + '\n')
     sys.stdout.flush()
+
+# Timing functions
+
+def timing(start, end):
+    hours, rem = divmod(end - start, 3600)
+    minutes, seconds = divmod(rem, 60)
+    log("{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
 
 # Control flow
 
@@ -34,12 +44,13 @@ def main(path):
         [X, labels] = utils.load_data_train(cp)
     except:
         X = utils.load_data_train(cp)
-    train(cp, X)
+        labels = None
+    train(cp, X, labels)
 
 # Initialize neural network and train model
 
 
-def train(cp, dataset):
+def train(cp, dataset, labels=None):
     # IO init
     prefix = cp.get('Experiment', 'prefix')
     out = cp.get('Experiment', 'ModelOutputPath')
@@ -65,18 +76,20 @@ def train(cp, dataset):
     # Save on CTRL-C
     try:
         for epoch in xrange(max_epochs):
+            # Epoch timing
+            tstart = time.time()
             # Gather losses
             reconstruct = []
             cross_entropy = []
             entropy = []
-            for row in xrange(0, dataset.shape[0], batch_size):
+            for row in tqdm(xrange(0, dataset.shape[0], batch_size),ascii=True):
                 reconstruct.append(recon_loss(row, batch_size, lr))
                 # Sample from normal distribution for prior p(z)
-                normal_sample = np.float32(np.random.normal(
-                    scale=pz_std, size=(batch_size, code_width)))
+                normal_sample = aae.sample_normal(batch_size,code_width)
                 cross_entropy.append(
                     dis_loss(row, batch_size, lr, normal_sample))
-                entropy.append(gen_loss(row, batch_size, lr))
+                entropy.append(gen_loss(row, batch_size, lr, normal_sample))
+                # aae.generate_digit(layer_dict)
             reconstruct = np.asarray(reconstruct)
             cross_entropy = np.asarray(cross_entropy)
             entropy = np.asarray(entropy)
@@ -88,6 +101,12 @@ def train(cp, dataset):
                     label='AAE-LCross')
                 log(str(epoch) + ' ' + str(np.mean(entropy)),
                     label='AAE-LEntr')
+                timing(tstart,time.time())
+                if labels is not None:
+                    template = aae.make_template(layer_dict, adv_ae)
+                    utils.plot_class_space(template, dataset, labels)
+                    recon = template.get_output(dataset[0:9,:]).reshape(9,28,28)
+                #     utils.plot_grid(recon,3,3,0,0)
             if epoch % ep_lr_decay1 == 0 or epoch % ep_lr_decay2 == 0:
                 lr = lr / 10
             if (epoch % 100 == 0) and (epoch != 0):

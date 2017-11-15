@@ -20,6 +20,7 @@ class Model(object):
       self._discriminator_input = layer_dict['Dis_in']
       self._discriminator_output = layer_dict['Dis_out']
       self._network = aae
+      self._layer_dict = layer_dict
 
   def __eq__(self, other):
       this_param = lasagne.layers.get_all_param_values(self._network)
@@ -41,7 +42,7 @@ class Model(object):
       self._input_layer.input_var = theano.shared(name='input_var', value=np.asarray(dataset,
                                                                        dtype=theano.config.floatX),
                                     borrow=True)
-      output = lasagne.layers.get_output(self._network).eval()
+      output = lasagne.layers.get_output(self._decoder_layer).eval()
       return output
 
   def save(self,filename='model_template.zip'):

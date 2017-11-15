@@ -8,6 +8,7 @@ import gzip
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import cm
 import ConfigParser
 import sys
 from datetime import datetime
@@ -16,7 +17,7 @@ import struct
 from array import array as pyarray
 from numpy import append, array, int8, uint8, zeros
 
-MNIST_PATH = '../mnist'
+MNIST_PATH = '../datasets/mnist'
 
 
 def save(filename, *objects):
@@ -57,19 +58,63 @@ def plot_image(image, x, y):
     plt.show()
 
 
-def displayz(a, x, y, startind=0, sizex=12, sizey=12, CMAP=None):
-    fig = plt.figure(figsize=(sizex, sizey))
-    fig.subplots_adjust(hspace=0.01, wspace=0.05)
-    for i in range(x * y):
-        sub = fig.add_subplot(x, y, i + 1)
-        # sub.imshow(a[startind+i,:,:], interpolation='nearest')
-        if CMAP:
-            sub.imshow(a[startind + i, :, :], cmap=CMAP,
-                       interpolation='nearest')
-        else:
-            sub.imshow(a[startind + i, :, :], interpolation='nearest')
+def plot_border(img):
+    newimg = np.pad(img,((1,1),(1,1)),'constant',constant_values=(0))
+    max_x = newimg.shape[0]-1
+    max_y = newimg.shape[1]-1
+    newimg[0,:] = np.ones(shape=(newimg[0,:].shape)) * np.max(newimg)
+    newimg[max_x,:] = np.ones(shape=(newimg[max_x,:].shape)) * np.max(newimg)
+    newimg[:,0] = np.ones(shape=(newimg[:,0].shape)) * np.max(newimg)
+    newimg[:,max_y] = np.ones(shape=(newimg[:,max_y].shape)) * np.max(newimg)
+    return newimg
+
+def plot_row(images, spacing, CMAP=None):
+    images = np.asarray([plot_border(image) for image in images])
+    x = images.shape[1]
+    y = images.shape[2]
+    canvas_y = y*len(images)+spacing*(len(images)-1)
+    canvas = np.zeros(shape=(x,canvas_y))
+    print canvas.shape
+    idx = range(0,canvas.shape[1],y+spacing)
+    for pos,i in enumerate(idx):
+        canvas[:,i:i+y] += images[pos]
+    if CMAP:
+      plt.matshow(canvas, cmap=CMAP)
+    else:
+      plt.matshow(canvas)
+    plt.axis('off')
+    plt.xticks(np.array([]))
+    plt.yticks(np.array([]))
     plt.show()
 
+def plot_grid(images, gridx, gridy, xspace, yspace, CMAP=plt.cm.binary, row_space=None, out=None,border=False):
+    if border:
+        images = np.asarray([plot_border(image) for image in images])
+    x = images.shape[1]
+    y = images.shape[2]
+    canvas_x = x*gridx+xspace*(gridx-1)
+    canvas_y = y*gridy+yspace*(gridy-1)
+    canvas = np.zeros(shape=(canvas_x,canvas_y))
+    idx_y = range(0,canvas.shape[1],y+yspace)
+    idx_x = range(0,canvas.shape[0],x+xspace)
+    for posi,i in enumerate(idx_x):
+        for posj,j in enumerate(idx_y):
+            canvas[i:i+y,j:j+y] += images[posi+posj]
+    if row_space:
+        zeros = np.zeros(shape=(row_space,canvas.shape[1]))
+        canvas = np.append(zeros,canvas)
+        canvas = canvas.reshape(row_space+canvas_x,canvas_y)
+    if CMAP:
+      plt.matshow(canvas, cmap=CMAP)
+    else:
+      plt.matshow(canvas)
+    plt.axis('off')
+    plt.xticks(np.array([]))
+    plt.yticks(np.array([]))
+    if out:
+        fig.savefig(out+".png")
+    else:
+        plt.show()
 
 def load_mnist(dataset="training", digits=np.arange(10), path="."):
     """
@@ -106,8 +151,8 @@ def load_mnist(dataset="training", digits=np.arange(10), path="."):
         images[i] = array(img[ind[i] * rows * cols: (ind[i] + 1)
                               * rows * cols]).reshape((rows * cols))
         labels[i] = lbl[ind[i]]
-    # for i in range(len(ind)):
-    #     images[i] = images[i] / 255
+    for i in range(len(ind)):
+        images[i] = images[i] / 255
     return images, labels
 
 
@@ -140,7 +185,7 @@ def load_data_train(cp):
         # Shuffle the dataset for training then use the same permutation for
         # the labels.
         p = np.random.permutation(X1.shape[0])
-        X = X1[p].astype(np.float32) * 0.02
+        X = X1[p].astype(np.float32)
         labels = labels1[p]
         prefix = cp.get('Experiment', 'prefix')
         np.save(out + prefix + '_' + num + '_' + 'random_perm.npy', p)
@@ -162,3 +207,21 @@ def load_data_train(cp):
         log('DONE........')
         log('Dataset shape: ' + str(X.shape))
         return X
+
+def plot_class_space(template, dataset, labels):
+    z = template.get_hidden(dataset)
+    plt.figure()
+    color=cm.rainbow(np.linspace(0,1,10))
+    for l,c in zip(range(10),color):
+        ix = np.where(labels==l)[0]
+        plt.scatter(z[ix,0],z[ix,1],c=c,label=l,s=8,linewidth=0)
+    plt.legend()
+    plt.show()
+
+def get_batch_idx(N, batch_size):
+    num_batches = (N + batch_size - 1) / batch_size
+
+    for i in range(num_batches):
+        start, end = i * batch_size, (i + 1) * batch_size
+        idx = slice(start, end)
+    yield idx
