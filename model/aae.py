@@ -79,131 +79,104 @@ def make_template(layer_dict, aae):
 
 # Create autoencoder objective function also known as reconstruction loss
 
-
-def reconstruction_loss(cp, input_var, layer_dict):
-    # Scalar used for batch training
-    index = T.lscalar()
-    batch_size = T.lscalar()
-    # Scalar used for learning rate
-    learning_rate = T.scalar(name='learning_rate')
+def reconstruction_loss(layer_dict):
+    # Symbolic var for learning rate
+    lr = T.scalar('lr')
+    # Symbolic input variable
+    input_var = T.fmatrix('input_var')
+    # Symbolic mini batch variable
+    batch = T.fmatrix('batch')
     # Get reconstructed input from AE
-    X_hat = ll.get_output(layer_dict['AAE_Output'])
+    reconstruction = ll.get_output(
+        layer_dict['AAE_Output'], input_var, deterministic=False)
     # MSE between real input and reconstructed input
-    recon_loss =  T.mean(
-        T.mean(T.sqr(layer_dict['AAE_Input'].input_var - X_hat), axis=1))
+    recon_loss = T.mean(T.mean(T.sqr(input_var - reconstruction), axis=1))
     # Update trainable parameters of AE
     recon_params = ll.get_all_params(layer_dict['AAE_Output'], trainable=True)
     recon_updates = lasagne.updates.nesterov_momentum(
-        recon_loss, recon_params, learning_rate=learning_rate, momentum=float(cp.get('Hyperparameters', 'momentum')))
+        recon_loss, recon_params, learning_rate=lr, momentum=0.9)
     # Reconstruction loss a.k.a Lrecon
-    recon_func = theano.function(inputs=[index, batch_size, learning_rate],
+    recon_func = theano.function(inputs=[theano.In(batch), lr],
                                  outputs=recon_loss, updates=recon_updates,
-                                 givens={layer_dict['AAE_Input'].input_var: input_var[
-                                     index:index + batch_size, :]}
+                                 givens={input_var: batch}
                                  )
     return recon_func
+
 
 # Create discriminator objective function also known as the cross entropy between prior
 # distribution p(z) and posterior estimate distribution q(z|x)
 
-
-def discriminator_loss(cp, input_var, layer_dict):
-    # Scalar used for batch training
-    index = T.lscalar()
-    batch_size = T.lscalar()
+# forward/backward (optional) pass for discriminator
+def discriminator_loss(layer_dict):
+    # Symbolic var for learning rate
+    dglr = T.scalar('lr')
+    # Symbolic input variable
+    input_var = T.fmatrix('input_var')
+    # Symbolic mini batch variable
+    batch = T.fmatrix('batch')
+    # Symbolic samples from p(z) prior
     pz = T.fmatrix('pz')
-    # Scalar used for learning rate
-    learning_rate = T.scalar(name='learning_rate')
+    # Symbolic batch for p(z)
+    pz_batch = T.fmatrix('pz_batch')
     # Get discriminator output
-    dis_out = ll.get_output(layer_dict['Dis_out'])
+    dis_out = ll.get_output(layer_dict['Dis_out'],
+                            inputs={layer_dict['pz_inp']: pz,
+                                    layer_dict['AAE_Input']: input_var},
+                            deterministic=False)
     # Fake/Real (0/1) labels for discriminator loss
     dis_targets = T.vertical_stack(
-        T.ones((batch_size, 1)),
-        T.zeros((batch_size, 1))
+        T.ones((batch.shape[0], 1)),
+        T.zeros((pz_batch.shape[0], 1))
     )
     # Cross entropy regularization term
-    dis_loss = T.nnet.binary_crossentropy(dis_out, dis_targets).mean()
-    # Train discriminator
-    dis_params = ll.get_all_params(
-        layer_dict['Dis_out'], trainable=True, discriminator=True)
+    dis_loss = T.mean(T.nnet.binary_crossentropy(dis_out, dis_targets))
+    dis_params = ll.get_all_params(layer_dict['Dis_out'], trainable=True,
+                                   discriminator=True)
     dis_updates = lasagne.updates.nesterov_momentum(
-        dis_loss, dis_params, learning_rate=learning_rate, momentum=float(cp.get('Hyperparameters', 'momentum')))
-    # Theano function
-    Ldis_func = theano.function(inputs=[index, batch_size, learning_rate, pz],
-                                outputs=dis_loss, updates=dis_updates,
-                                givens={
-                                    layer_dict['AAE_Input'].input_var: input_var[index:index + batch_size, :],
-                                    layer_dict['pz_inp'].input_var: pz
-    }
-    )
-    return Ldis_func
+        dis_loss, dis_params, learning_rate=dglr, momentum=0.0)
+    # Discriminator loss aka Cross Entropy term
+    dis_func = theano.function(inputs=[theano.In(batch),
+                                       theano.In(pz_batch), dglr],
+                               outputs=dis_loss, updates=dis_updates,
+                               givens={input_var: batch, pz: pz_batch}
+                               )
+    return dis_func
+
 
 # Create generator objective function also known as the entropy of the posterior
 # estimate distribution q(z|x)
 
-
-def generator_loss(cp, input_var, layer_dict):
-    # Scalar used for batch training
-    index = T.lscalar()
-    batch_size = T.lscalar()
-    # Scalar used for learning rate
-    learning_rate = T.scalar(name='learning_rate')
-    pz = T.fmatrix('pz')
+def generator_loss(layer_dict):
+    # Symbolic var for learning rate
+    dglr = T.scalar('lr')
+    # Symbolic input variable
+    input_var = T.fmatrix('input_var')
+    # Symbolic mini batch variable
+    batch = T.fmatrix('batch')
+    # Get generator output
+    gen_out = ll.get_output(layer_dict['Z'], input_var, deterministic=False)
     # Pass generator output to discriminator input
-    dis_out = ll.get_output(layer_dict['Dis_out'])
-    # Create generator targets
-    gen_targets = T.zeros_like(dis_out.shape[0])
+    dis_out = ll.get_output(layer_dict['Dis_out'],
+                            inputs={layer_dict['Dis_in']: gen_out},
+                            deterministic=False
+                            )
+    # Create generator targets, confuse discriminator
+    gen_targets = T.zeros_like(batch.shape[0])
     # Entropy regularization term
-    gen_loss = T.nnet.binary_crossentropy(dis_out, gen_targets).mean()
-    # Train generator
+    gen_loss = T.mean(T.nnet.binary_crossentropy(dis_out, gen_targets))
     gen_params = ll.get_all_params(
         layer_dict['Dis_out'], trainable=True, generator=True)
     gen_updates = lasagne.updates.nesterov_momentum(
-        gen_loss, gen_params, learning_rate=learning_rate, momentum=float(cp.get('Hyperparameters', 'momentum')))
-    Lgen_func = theano.function(inputs=[index, batch_size, learning_rate, pz],
-                                outputs=gen_loss, updates=gen_updates,
-                                givens={
-                                    layer_dict['AAE_Input'].input_var: input_var[index:index + batch_size, :],
-                                    layer_dict['pz_inp'].input_var: pz
-    }
-    )
-    return Lgen_func
+        gen_loss, gen_params, learning_rate=dglr, momentum=0.0)
+    # Generator loss aka Entropy term
+    gen_func = theano.function(inputs=[theano.In(batch), dglr],
+                               outputs=gen_loss, updates=gen_updates,
+                               givens={input_var: batch}
+                               )
+    return gen_func
 
 # Sample from normal distribution
 
-def sample_normal(batch_size, code_width):
-    rs = RandomStreams(seed=np.random.randint(1234))
-    return 1.0*rs.normal(size=(batch_size, code_width),dtype=theano.config.floatX).eval()
 
-
-def gpu_sample_normal(batch_size, code_width):
-    rs = RandomStreams(seed=np.random.randint(1234))
-    return 1.0*rs.normal(size=(batch_size, code_width),dtype=theano.config.floatX)
-
-# Create REAL generator network
-
-def generate_digit(layer_dict):
-    input_lay = gen = layer_dict['pz_inp']
-    for sect in [layer_dict[i] for i in layer_dict if 'Decoder' in i]:
-        gen = ll.DenseLayer(incoming=gen,
-                                   num_units=sect.num_units,
-                                   W=sect.W, nonlinearity=sect.nonlinearity,
-                                   name=sect)
-    sect = layer_dict['AAE_Output']
-    gen = ll.DenseLayer(incoming=gen,
-                               num_units=sect.num_units,
-                               W=sect.W, nonlinearity=sect.nonlinearity,
-                               name=sect)
-    input_lay.input_var = gpu_sample_normal(9,2)
-    utils.plot_grid(ll.get_output(gen).eval().reshape(9,28,28),3,3,0,0)
-
-#
-# if __name__ == '__main__':
-#     cp = utils.load_config('../cfg/aae_default.ini')
-#     [layer_dict, aae] = build_model(cp)
-# #     print('collected %d layers' % (len(layer_dict.keys())))
-#     for name in layer_dict:
-#         print name, ll.get_output_shape(layer_dict[name])
-# #         print('%s: %r' % (name, layer_dict[name]))
-# #     print ll.get_all_params(layer_dict['AAE_Output'],trainable=True)
-# #     print len(ll.get_all_params(layer_dict['AAE_Output'],trainable=True))
+def sample_normal(batch_size, code_width, mu=0, sigma=1):
+    return np.random.normal(mu, sigma, size=(batch_size, code_width)).astype(np.float32)

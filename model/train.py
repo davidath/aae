@@ -7,7 +7,7 @@
 import os
 # Removing/Adding comment enables/disables theano GPU support
 os.environ[
-    'THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
+    'THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32,on_unused_input=ignore'
 # Removing/Adding comment forces/stops theano CPU support, usually used for model saving
 # os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
 import numpy as np
@@ -19,6 +19,7 @@ import theano.tensor as T
 from datetime import datetime
 import time
 from tqdm import *
+import lasagne.layers as ll
 
 # Logging messages such as loss,loading,etc.
 
@@ -55,24 +56,20 @@ def train(cp, dataset, labels=None):
     prefix = cp.get('Experiment', 'prefix')
     out = cp.get('Experiment', 'ModelOutputPath')
     num = cp.get('Experiment', 'Enumber')
-    # Shared input variable
-    input_var = theano.shared(name='input_var', value=np.asarray(dataset,
-                                                                 dtype=theano.config.floatX),
-                              borrow=True)
     # Building/Stacking layers
     [layer_dict, adv_ae] = aae.build_model(cp)
-    # Get objective functions
-    recon_loss = aae.reconstruction_loss(cp, input_var, layer_dict)
-    dis_loss = aae.discriminator_loss(cp, input_var, layer_dict)
-    gen_loss = aae.generator_loss(cp, input_var, layer_dict)
     # Pre-train inits
-    pz_std = float(cp.get('Hyperparameters', 'pz_std'))
     code_width = cp.getint('Z', 'Width')
     batch_size = cp.getint('Hyperparameters', 'batchsize')
     ep_lr_decay1 = cp.getint('Hyperparameters', 'lrdecayepoch1')
     ep_lr_decay2 = cp.getint('Hyperparameters', 'lrdecayepoch2')
     max_epochs = cp.getint('Hyperparameters', 'maxepochs')
-    lr = float(cp.get('Hyperparameters', 'learningrate'))
+    lr = float(cp.get('Hyperparameters', 'AElearningrate'))
+    dglr = float(cp.get('Hyperparameters', 'DGlearningrate'))
+    # Get objective functions
+    recon_loss = aae.reconstruction_loss(layer_dict)
+    dis_loss = aae.discriminator_loss(layer_dict)
+    gen_loss = aae.generator_loss(layer_dict)
     # Save on CTRL-C
     try:
         for epoch in xrange(max_epochs):
@@ -82,14 +79,17 @@ def train(cp, dataset, labels=None):
             reconstruct = []
             cross_entropy = []
             entropy = []
+            # Mini batch loop
             for row in tqdm(xrange(0, dataset.shape[0], batch_size),ascii=True):
-                reconstruct.append(recon_loss(row, batch_size, lr))
+                # Slice dataset
+                idx = slice(row,row+batch_size)
+                X_batch = dataset[idx]
+                reconstruct.append(recon_loss(X_batch, lr))
                 # Sample from normal distribution for prior p(z)
                 normal_sample = aae.sample_normal(batch_size,code_width)
                 cross_entropy.append(
-                    dis_loss(row, batch_size, lr, normal_sample))
-                entropy.append(gen_loss(row, batch_size, lr, normal_sample))
-                # aae.generate_digit(layer_dict)
+                    dis_loss(X_batch, normal_sample, dglr))
+                entropy.append(gen_loss(X_batch, dglr))
             reconstruct = np.asarray(reconstruct)
             cross_entropy = np.asarray(cross_entropy)
             entropy = np.asarray(entropy)
@@ -102,13 +102,11 @@ def train(cp, dataset, labels=None):
                 log(str(epoch) + ' ' + str(np.mean(entropy)),
                     label='AAE-LEntr')
                 timing(tstart,time.time())
-                if labels is not None:
-                    template = aae.make_template(layer_dict, adv_ae)
-                    utils.plot_class_space(template, dataset, labels)
-                    recon = template.get_output(dataset[0:9,:]).reshape(9,28,28)
-                #     utils.plot_grid(recon,3,3,0,0)
-            if epoch % ep_lr_decay1 == 0 or epoch % ep_lr_decay2 == 0:
-                lr = lr / 10
+                recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval().reshape(100,28,28)
+                utils.plot_grid(recon,10,10,0,0)
+            if epoch == ep_lr_decay1 or epoch == ep_lr_decay2:
+                lr = lr / 10.0
+                dglr = dglr / 10.0
             if (epoch % 100 == 0) and (epoch != 0):
                 template = aae.make_template(layer_dict, adv_ae)
                 template.save(out + prefix + '_' + num + '_' + 'model.zip')
