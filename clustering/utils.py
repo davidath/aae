@@ -201,7 +201,7 @@ def load_data_train(cp):
             log('Input file must be a saved numpy object (*.npy)')
         # Shuffle the dataset
         p = np.random.permutation(X.shape[0])
-        X = X[p]
+        X = X[p].astype(np.float32)
         prefix = cp.get('Experiment', 'prefix')
         np.save(out + prefix +  '_' + num + '_' + 'random_perm.npy', p)
         log('DONE........')

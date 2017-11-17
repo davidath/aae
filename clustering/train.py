@@ -6,8 +6,7 @@
 
 import os
 # Removing/Adding comment enables/disables theano GPU support
-os.environ[
-    'THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32,on_unused_input=ignore'
+os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
 # Removing/Adding comment forces/stops theano CPU support, usually used for model saving
 # os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
 import numpy as np
