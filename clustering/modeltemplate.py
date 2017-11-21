@@ -31,17 +31,19 @@ class Model(object):
       return True
 
   def get_hidden(self, dataset):
-      self._input_layer.input_var = theano.shared(name='input_var', value=np.asarray(dataset,
-                                                                       dtype=theano.config.floatX),
-                                    borrow=True)
+      self._input_layer.input_var = theano.shared(name='input_var',
+                                               value=np.asarray(dataset,
+                                               dtype=theano.config.floatX),
+                                               borrow=True)
       hidden = lasagne.layers.get_output(self._encoder_layer).eval()
       return hidden
 
 
   def get_output(self, dataset):
-      self._input_layer.input_var = theano.shared(name='input_var', value=np.asarray(dataset,
-                                                                       dtype=theano.config.floatX),
-                                    borrow=True)
+      self._input_layer.input_var = theano.shared(name='input_var',
+                                                   value=np.asarray(dataset,
+                                                   dtype=theano.config.floatX),
+                                                   borrow=True)
       output = lasagne.layers.get_output(self._decoder_layer).eval()
       return output
 

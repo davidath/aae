@@ -29,6 +29,7 @@ def log(s, label='INFO'):
 
 # Timing functions
 
+
 def timing(start, end):
     hours, rem = divmod(end - start, 3600)
     minutes, seconds = divmod(rem, 60)
@@ -42,10 +43,28 @@ def main(path):
     # Check if MNIST dataset was loaded
     try:
         [X, labels] = utils.load_data_train(cp)
+    except KeyboardInterrupt:
+        log('Caught CTRL-C....', label='Exception')
+        log('Loading data was stopped..... exiting', label='Exception')
+        exit(-1)
     except:
         X = utils.load_data_train(cp)
         labels = None
     train(cp, X, labels)
+
+# Plot batch reconstruction
+
+
+def plot_batch_reconstruction(layer_dict, X_batch):
+    try:
+        x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
+        gridx = gridy = int(np.sqrt(X_batch.shape[0]))
+        recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval(
+        ).reshape(X_batch.shape[0], x_size, y_size)
+        utils.plot_grid(recon, gridx, gridy, x_size, y_size)
+    except:
+        log('Expected square matrices for batch and sample....')
+        log('Unable to plot grid.....')
 
 # Initialize neural network and train model
 
@@ -65,13 +84,21 @@ def train(cp, dataset, labels=None):
     max_epochs = cp.getint('Hyperparameters', 'maxepochs')
     lr = float(cp.get('Hyperparameters', 'AElearningrate'))
     dglr = float(cp.get('Hyperparameters', 'DGlearningrate'))
+    plot_recon = cp.getboolean('Experiment', 'PlotReconstruction')
+    sample_dist = cp.get('Hyperparameters', 'SampleDist')
+    # Number of mnist labels
+    if labels is not None:
+        num_labels = [i[0] for i in labels]
+        num_labels = len(set(num_labels))
+    else:
+        num_labels = None
     # Get objective functions
     recon_loss = aae.reconstruction_loss(layer_dict)
     dis_loss = aae.discriminator_loss(layer_dict)
     gen_loss = aae.generator_loss(layer_dict)
-    # Save on CTRL-C
-    try:
-        for epoch in xrange(max_epochs):
+    for epoch in xrange(max_epochs):
+        # Save on CTRL-C
+        try:
             # Epoch timing
             tstart = time.time()
             # Gather losses
@@ -79,41 +106,56 @@ def train(cp, dataset, labels=None):
             cross_entropy = []
             entropy = []
             # Mini batch loop
-            for row in tqdm(xrange(0, dataset.shape[0], batch_size),ascii=True):
+            for row in tqdm(xrange(0, dataset.shape[0], batch_size), ascii=True):
                 # Slice dataset
-                idx = slice(row,row+batch_size)
+                idx = slice(row, row + batch_size)
                 X_batch = dataset[idx]
                 reconstruct.append(recon_loss(X_batch, lr))
                 # Sample from normal distribution for prior p(z)
-                normal_sample = aae.sample_normal(batch_size,code_width)
+                if sample_dist == 'swiss' and num_labels is not None:
+                    sample = aae.sample_swiss_roll(
+                        batch_size, code_width, num_labels)
+                elif sample_dist == 'uniform':
+                    sample = aae.sample_uniform(batch_size, code_width)
+                else:
+                    sample = aae.sample_normal(batch_size, code_width)
                 cross_entropy.append(
-                    dis_loss(X_batch, normal_sample, dglr))
+                    dis_loss(X_batch, sample, dglr))
                 entropy.append(gen_loss(X_batch, dglr))
             reconstruct = np.asarray(reconstruct)
             cross_entropy = np.asarray(cross_entropy)
             entropy = np.asarray(entropy)
             # Train loss messages and model saves
-            if epoch % 10 == 0:
+            if epoch % 5 == 0:
                 log(str(epoch) + ' ' + str(np.mean(reconstruct)),
                     label='AAE-LRecon')
                 log(str(epoch) + ' ' + str(np.mean(cross_entropy)),
                     label='AAE-LCross')
                 log(str(epoch) + ' ' + str(np.mean(entropy)),
                     label='AAE-LEntr')
-                timing(tstart,time.time())
-                recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval().reshape(100,28,28)
-                utils.plot_grid(recon,10,10,0,0)
-            if epoch == ep_lr_decay1 or epoch == ep_lr_decay2:
+                timing(tstart, time.time())
+                # Optional reconstruction plot during training
+                if plot_recon:
+                    plot_batch_reconstruction(layer_dict, X_batch)
+            # Learning rate decay
+            if (epoch == ep_lr_decay1) or (epoch == ep_lr_decay2):
                 lr = lr / 10.0
                 dglr = dglr / 10.0
+            # Save on milestone epochs
             if (epoch % 100 == 0) and (epoch != 0):
                 template = aae.make_template(layer_dict, adv_ae)
                 template.save(out + prefix + '_' + num + '_' + 'model.zip')
-    except KeyboardInterrupt:
-        # log('Caught CTRL-C, Training has been stoped.......')
-        # log('Saving model....')
-        template = aae.make_template(layer_dict, adv_ae)
-        template.save(out + prefix + '_' + num + '_' + 'model.zip')
+                np.save(out + prefix + '_' + num + '_' + 'weights.npy',
+                        ll.get_all_param_values(adv_ae))
+        # Save on CTRl-C
+        except KeyboardInterrupt:
+            log('Caught CTRL-C, Training has been stoped.......')
+            log('Saving model....')
+            template = aae.make_template(layer_dict, adv_ae)
+            template.save(out + prefix + '_' + num + '_' + 'model.zip')
+            np.save(out + prefix + '_' + num + '_' + 'weights.npy',
+                    ll.get_all_param_values(adv_ae))
+            break
 
 from operator import attrgetter
 from argparse import ArgumentParser
