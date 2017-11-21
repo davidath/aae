@@ -89,32 +89,27 @@ def plot_row(images, spacing, CMAP=None):
     plt.show()
 
 
-def plot_grid(images, gridx, gridy, xspace, yspace, CMAP=plt.cm.binary, row_space=None, out=None, border=False):
-    if border:
-        images = np.asarray([plot_border(image) for image in images])
-    x = images.shape[1]
-    y = images.shape[2]
-    canvas_x = x * gridx + xspace * (gridx - 1)
-    canvas_y = y * gridy + yspace * (gridy - 1)
-    canvas = np.zeros(shape=(canvas_x, canvas_y))
-    idx_y = range(0, canvas.shape[1], y + yspace)
-    idx_x = range(0, canvas.shape[0], x + xspace)
-    for posi, i in enumerate(idx_x):
-        for posj, j in enumerate(idx_y):
-            canvas[i:i + y, j:j + y] += images[posi + posj]
-    if row_space:
-        zeros = np.zeros(shape=(row_space, canvas.shape[1]))
-        canvas = np.append(zeros, canvas)
-        canvas = canvas.reshape(row_space + canvas_x, canvas_y)
-    if CMAP:
-        plt.matshow(canvas, cmap=CMAP)
-    else:
-        plt.matshow(canvas)
+def plot_grid(images, x, y, img_x, img_y, CMAP=plt.cm.binary, out=None, border=2):
+    images = (i for i in images)
+    width = border * (x + 1) + x * img_x
+    height = border * (y + 1) + y * img_y
+
+    res = np.zeros([height, width])  # the resulting image
+
+    for curr_x in range(x):
+        x_offset = (curr_x + 1) * border + (curr_x * img_x)
+        for curr_y in range(y):
+            y_offset = (curr_y + 1) * border + (curr_y * img_y)
+            # print x_offset, y_offset
+            try:
+                res[x_offset:x_offset + img_x, y_offset:y_offset + img_y] = images.next().reshape(img_x, img_y)
+            except StopIteration:
+                pass
+    fig = plt.figure()
+    plt.imshow(res, cmap=CMAP)
     plt.axis('off')
-    plt.xticks(np.array([]))
-    plt.yticks(np.array([]))
     if out:
-        plt.imsave(out + ".png", canvas, cmap=CMAP)
+        fig.savefig(out + '.png')
     else:
         plt.show()
 

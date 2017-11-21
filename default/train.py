@@ -61,7 +61,7 @@ def plot_batch_reconstruction(layer_dict, X_batch):
         gridx = gridy = int(np.sqrt(X_batch.shape[0]))
         recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval(
         ).reshape(X_batch.shape[0], x_size, y_size)
-        utils.plot_grid(recon, gridx, gridy, 0, 0)
+        utils.plot_grid(recon, gridx, gridy, x_size, y_size)
     except:
         log('Expected square matrices for batch and sample....')
         log('Unable to plot grid.....')

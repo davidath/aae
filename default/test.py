@@ -67,9 +67,9 @@ def plot_batch_reconstruction(layer_dict, X_batch, out=None):
         recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval(
         ).reshape(X_batch.shape[0], x_size, y_size)
         if out:
-            utils.plot_grid(recon, gridx, gridy, 0, 0, out=out)
+            utils.plot_grid(recon, gridx, gridy, x_size, y_size, out=out)
         else:
-            utils.plot_grid(recon, gridx, gridy, 0, 0)
+            utils.plot_grid(recon, gridx, gridy, x_size, y_size)
     except:
         log('Expected square matrices for batch and sample....')
         log('Unable to plot grid.....')
@@ -85,9 +85,9 @@ def plot_generated(layer_dict, random_sample, out=None):
                                 inputs={layer_dict['Z']: random_sample}).eval()
         gen_out = gen_out.reshape(random_sample.shape[0], x_size, y_size)
         if out:
-            utils.plot_grid(gen_out, gridx, gridy, 0, 0, out=out)
+            utils.plot_grid(gen_out, gridx, gridy, x_size, y_size, out=out)
         else:
-            utils.plot_grid(gen_out, gridx, gridy, 0, 0)
+            utils.plot_grid(gen_out, gridx, gridy, x_size, y_size)
     except:
         log('Expected square matrices....')
         log('Unable to plot grid.....')
