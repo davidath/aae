@@ -16,14 +16,15 @@ from theano.tensor.shared_randomstreams import RandomStreams
 
 def build_model(cp):
     # Check batch norm flag
-    batch_norm_flag = cp.getboolean('Hyperparameters','BatchNorm')
+    batch_norm_flag = cp.getboolean('Hyperparameters', 'BatchNorm')
     # Initialize activation functions
     relu = lasagne.nonlinearities.rectify
     linear = lasagne.nonlinearities.linear
     sigmoid = lasagne.nonlinearities.sigmoid
     softmax = lasagne.nonlinearities.softmax
     # Make activation dictionary
-    act_dict = {'ReLU': relu, 'Linear': linear, 'Sigmoid': sigmoid, 'Softmax': softmax}
+    act_dict = {'ReLU': relu, 'Linear': linear,
+        'Sigmoid': sigmoid, 'Softmax': softmax}
     # Begin stacking layers
     # Input
     input_layer = ae_network = ll.InputLayer(
@@ -77,7 +78,9 @@ def build_model(cp):
                          num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
                          b=None,
                          name='PreDecZ')
-    ae_network = ll.ConcatLayer([gen_z, gen_y], axis=0, name='MergeDec')
+    gen_y = ll.FlattenLayer(gen_y)
+    gen_z = ll.FlattenLayer(gen_z)
+    ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeDec')
     # Add batch norm when flag is true
     if batch_norm_flag:
         ae_network = ll.BatchNormLayer(incoming=ae_network)
@@ -103,7 +106,7 @@ def build_model(cp):
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         z_dis_net = ll.DenseLayer(incoming=z_dis_net,
                                 num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                name='Z_'+sect)
+                                name='Z_' + sect)
         # Add generator flag that will be used in backward pass
         z_dis_net.params[z_dis_net.W].add('discriminator_z')
         z_dis_net.params[z_dis_net.b].add('discriminator_z')
@@ -124,7 +127,7 @@ def build_model(cp):
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         y_dis_net = ll.DenseLayer(incoming=y_dis_net,
                                 num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                name='Y_'+sect)
+                                name='Y_' + sect)
         # Add generator flag that will be used in backward pass
         y_dis_net.params[y_dis_net.W].add('discriminator_z')
         y_dis_net.params[y_dis_net.b].add('discriminator_z')
@@ -145,14 +148,15 @@ def build_model(cp):
 
 def load_pretrained(cp, weights):
     # Check batch norm flag
-    batch_norm_flag = cp.getboolean('Hyperparameters','BatchNorm')
+    batch_norm_flag = cp.getboolean('Hyperparameters', 'BatchNorm')
     # Initialize activation functions
     relu = lasagne.nonlinearities.rectify
     linear = lasagne.nonlinearities.linear
     sigmoid = lasagne.nonlinearities.sigmoid
     softmax = lasagne.nonlinearities.softmax
     # Make activation dictionary
-    act_dict = {'ReLU': relu, 'Linear': linear, 'Sigmoid': sigmoid, 'Softmax': softmax}
+    act_dict = {'ReLU': relu, 'Linear': linear,
+        'Sigmoid': sigmoid, 'Softmax': softmax}
     # Begin stacking layers
     # Input
     input_layer = ae_network = ll.InputLayer(
@@ -206,7 +210,9 @@ def load_pretrained(cp, weights):
                          num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
                          b=None,
                          name='PreDecZ')
-    ae_network = ll.ConcatLayer([gen_z, gen_y], axis=0, name='MergeDec')
+    gen_y = ll.FlattenLayer(gen_y)
+    gen_z = ll.FlattenLayer(gen_z)
+    ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeDec')
     # Add batch norm when flag is true
     if batch_norm_flag:
         ae_network = ll.BatchNormLayer(incoming=ae_network)
@@ -232,7 +238,7 @@ def load_pretrained(cp, weights):
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         z_dis_net = ll.DenseLayer(incoming=z_dis_net,
                                 num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                name='Z_'+sect)
+                                name='Z_' + sect)
         # Add generator flag that will be used in backward pass
         z_dis_net.params[z_dis_net.W].add('discriminator_z')
         z_dis_net.params[z_dis_net.b].add('discriminator_z')
@@ -253,7 +259,7 @@ def load_pretrained(cp, weights):
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         y_dis_net = ll.DenseLayer(incoming=y_dis_net,
                                 num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                name='Y_'+sect)
+                                name='Y_' + sect)
         # Add generator flag that will be used in backward pass
         y_dis_net.params[y_dis_net.W].add('discriminator_z')
         y_dis_net.params[y_dis_net.b].add('discriminator_z')
@@ -348,6 +354,8 @@ def z_discriminator_loss(layer_dict):
 # distribution p(y) and posterior estimate distribution q(y|x)
 
 # forward/backward (optional) pass for Y_discriminator
+
+
 def y_discriminator_loss(layer_dict):
     # Symbolic var for learning rate
     dglr = T.scalar('lr')
@@ -465,8 +473,11 @@ def sample_uniform(batch_size, code_width, low=-2, high=2):
 
 # Sample swiss roll
 # Credits to https://github.com/musyoku/adversarial-autoencoder
+
+
 def sample(label, num_labels):
-	uni = np.random.uniform(0.0, 1.0) / float(num_labels) + float(label) / float(num_labels)
+	uni = np.random.uniform(0.0, 1.0) / float(num_labels) + \
+	                        float(label) / float(num_labels)
 	r = np.sqrt(uni) * 3.0
 	rad = np.pi * 4.0 * np.sqrt(uni)
 	x = r * np.cos(rad)
@@ -478,12 +489,24 @@ def sample_swiss_roll(batchsize, ndim, num_labels):
 	z = np.zeros((batchsize, ndim), dtype=np.float32)
 	for batch in range(batchsize):
 		for zi in range(ndim // 2):
-			z[batch, zi*2:zi*2+2] = sample(np.random.randint(0, num_labels - 1), num_labels)
+			z[batch, zi * 2:zi * 2 +
+			    2] = sample(np.random.randint(0, num_labels - 1), num_labels)
 	return z
+
+# Sample onehot_categorical
+# Credits to https://github.com/musyoku/adversarial-autoencoder
+
+
+def sample_cat(batchsize, num_labels):
+	y = np.zeros((batchsize, num_labels), dtype=np.float32)
+	indices = np.random.randint(0, num_labels, batchsize)
+	for b in range(batchsize):
+		y[b, indices[b]] = 1
+	return y
 
 
 if __name__ == "__main__":
     import utils
     cp = utils.load_config('../cfg/clustering/normal.ini')
     from draw_net import *
-    draw_to_file(build_model(cp)[1],'aae_clustering_model_architecture.pdf',verbose=True)
+    draw_to_file(build_model(cp)[1], 'test.pdf', verbose=True)

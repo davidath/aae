@@ -78,6 +78,7 @@ def train(cp, dataset, labels=None):
     [layer_dict, adv_ae] = aae.build_model(cp)
     # Pre-train inits
     code_width = cp.getint('Z', 'Width')
+    label_width = cp.getint('Y', 'Width')
     batch_size = cp.getint('Hyperparameters', 'batchsize')
     ep_lr_decay1 = cp.getint('Hyperparameters', 'lrdecayepoch1')
     ep_lr_decay2 = cp.getint('Hyperparameters', 'lrdecayepoch2')
@@ -94,8 +95,10 @@ def train(cp, dataset, labels=None):
         num_labels = None
     # Get objective functions
     recon_loss = aae.reconstruction_loss(layer_dict)
-    dis_loss = aae.discriminator_loss(layer_dict)
-    gen_loss = aae.generator_loss(layer_dict)
+    z_dis_loss = aae.z_discriminator_loss(layer_dict)
+    y_dis_loss = aae.y_discriminator_loss(layer_dict)
+    z_gen_loss = aae.z_generator_loss(layer_dict)
+    y_gen_loss = aae.y_generator_loss(layer_dict)
     for epoch in xrange(max_epochs):
         # Save on CTRL-C
         try:
@@ -119,9 +122,10 @@ def train(cp, dataset, labels=None):
                     sample = aae.sample_uniform(batch_size, code_width)
                 else:
                     sample = aae.sample_normal(batch_size, code_width)
+                y_sample = aae.sample_cat(batch_size, label_width)
                 cross_entropy.append(
-                    dis_loss(X_batch, sample, dglr))
-                entropy.append(gen_loss(X_batch, dglr))
+                    z_dis_loss(X_batch, sample, dglr)+y_dis_loss(X_batch, y_sample, dglr))
+                entropy.append(z_gen_loss(X_batch, dglr)+y_gen_loss(X_batch, dglr))
             reconstruct = np.asarray(reconstruct)
             cross_entropy = np.asarray(cross_entropy)
             entropy = np.asarray(entropy)

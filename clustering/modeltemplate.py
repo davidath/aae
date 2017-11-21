@@ -15,10 +15,13 @@ class Model(object):
 
   def __init__(self, layer_dict, aae):
       self._input_layer = layer_dict['AAE_Input']
-      self._encoder_layer = layer_dict['Z']
+      self._z_encoder_layer = layer_dict['Z']
+      self._y_encoder_layer = layer_dict['Y']
       self._decoder_layer = layer_dict['AAE_Output']
-      self._discriminator_input = layer_dict['Dis_in']
-      self._discriminator_output = layer_dict['Dis_out']
+      self._z_discriminator_input = layer_dict['Z_Dis_in']
+      self._y_discriminator_input = layer_dict['Y_Dis_in']
+      self._z_discriminator_output = layer_dict['Z_Dis_out']
+      self._y_discriminator_output = layer_dict['Y_Dis_out']
       self._network = aae
       self._layer_dict = layer_dict
 
@@ -35,7 +38,7 @@ class Model(object):
                                                value=np.asarray(dataset,
                                                dtype=theano.config.floatX),
                                                borrow=True)
-      hidden = lasagne.layers.get_output(self._encoder_layer).eval()
+      hidden = lasagne.layers.get_output(self._z_encoder_layer).eval()
       return hidden
 
 
