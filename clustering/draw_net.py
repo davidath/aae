@@ -72,6 +72,14 @@ def get_pydot_graph(layers, output_shape=True, verbose=False):
         label = layer_type
         color = get_hex_color(layer_type)
         if verbose:
+            try:
+                W_labels = list(layer.params[layer.W])
+                W_additional = [l for l in W_labels if l != 'regularizable' and l !='trainable']
+                if W_additional:
+                    label += '\n' + \
+                        '{0}: {1}'.format('W_labels', ','.join(W_additional))
+            except:
+                pass
             for attr in ['num_filters', 'num_units', 'ds',
                          'filter_size','filter_shape', 'stride', 'strides', 'p', 'pad', 'name']:
                 if hasattr(layer, attr):
@@ -83,7 +91,6 @@ def get_pydot_graph(layers, output_shape=True, verbose=False):
                 except AttributeError:
                     nonlinearity = layer.nonlinearity.__class__.__name__
                 label += '\n' + 'nonlinearity: {0}'.format(nonlinearity)
-
         if output_shape:
             label += '\n' + \
                 'Output shape: {0}'.format(lasagne.layers.get_output_shape(layer))
