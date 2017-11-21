@@ -2,4 +2,7 @@
 My implementation of adversarial autoencoder as seen in https://arxiv.org/pdf/1511.05644.pdf
 
 # Default aae
-![alt text](https://github.com/davidath/aae/raw/master/cfg/AAE_default.png "Logo Title Text 1")
+<p align="center">
+  <img src="https://raw.githubusercontent.com/davidath/aae/master/cfg/AAE_default.png">
+</p>
+
