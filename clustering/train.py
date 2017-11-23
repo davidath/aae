@@ -6,7 +6,7 @@
 
 import os
 # Removing/Adding comment enables/disables theano GPU support
-os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
+# os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
 # Removing/Adding comment forces/stops theano CPU support, usually used for model saving
 # os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
 import numpy as np
@@ -66,6 +66,23 @@ def plot_batch_reconstruction(layer_dict, X_batch):
         log('Expected square matrices for batch and sample....')
         log('Unable to plot grid.....')
 
+
+def plot_cluster_heads(layer_dict, batch_size, code_width):
+    head_x = ll.get_output(layer_dict['AAE_Output'],
+                           inputs={layer_dict['Y']: np.identity(
+                               ll.get_output_shape(layer_dict['Y'])[1], dtype=theano.config.floatX),
+        layer_dict['Z']: np.zeros((ll.get_output_shape(layer_dict['Y'])[1], code_width),
+                                  dtype=theano.config.floatX
+                                  )
+    }
+    ).eval().reshape(ll.get_output_shape(layer_dict['Y'])[1], 28, 28)
+    utils.plot_grid(head_x, 6, 6, 28, 28)
+
+def hist(sample):
+    import matplotlib.pyplot as plt
+    plt.hist(np.argmax(sample,axis=1))
+    plt.show()
+
 # Initialize neural network and train model
 
 
@@ -106,8 +123,10 @@ def train(cp, dataset, labels=None):
             tstart = time.time()
             # Gather losses
             reconstruct = []
-            cross_entropy = []
-            entropy = []
+            z_cross_entropy = []
+            y_cross_entropy = []
+            z_entropy = []
+            y_entropy = []
             # Mini batch loop
             for row in tqdm(xrange(0, dataset.shape[0], batch_size), ascii=True):
                 # Slice dataset
@@ -123,24 +142,34 @@ def train(cp, dataset, labels=None):
                 else:
                     sample = aae.sample_normal(batch_size, code_width)
                 y_sample = aae.sample_cat(batch_size, label_width)
-                cross_entropy.append(
-                    z_dis_loss(X_batch, sample, dglr)+y_dis_loss(X_batch, y_sample, dglr))
-                entropy.append(z_gen_loss(X_batch, dglr)+y_gen_loss(X_batch, dglr))
+                z_cross_entropy.append(z_dis_loss(X_batch, sample, dglr))
+                y_cross_entropy.append(y_dis_loss(X_batch, y_sample, dglr))
+                z_entropy.append(z_gen_loss(X_batch, dglr))
+                y_entropy.append(y_gen_loss(X_batch, dglr))
             reconstruct = np.asarray(reconstruct)
-            cross_entropy = np.asarray(cross_entropy)
-            entropy = np.asarray(entropy)
+            z_cross_entropy = np.asarray(z_cross_entropy)
+            y_cross_entropy = np.asarray(y_cross_entropy)
+            z_entropy = np.asarray(z_entropy)
+            y_entropy = np.asarray(y_entropy)
             # Train loss messages and model saves
             if epoch % 5 == 0:
                 log(str(epoch) + ' ' + str(np.mean(reconstruct)),
                     label='AAE-LRecon')
-                log(str(epoch) + ' ' + str(np.mean(cross_entropy)),
-                    label='AAE-LCross')
-                log(str(epoch) + ' ' + str(np.mean(entropy)),
-                    label='AAE-LEntr')
+                log(str(epoch) + ' ' + str(np.mean(z_cross_entropy)),
+                    label='AAE-Z-Cross')
+                log(str(epoch) + ' ' + str(np.mean(y_cross_entropy)),
+                    label='AAE-Y-Cross')
+                log(str(epoch) + ' ' + str(np.mean(z_entropy)),
+                    label='AAE-Z-Entr')
+                log(str(epoch) + ' ' + str(np.mean(y_entropy)),
+                    label='AAE-Y-Entr')
                 timing(tstart, time.time())
                 # Optional reconstruction plot during training
                 if plot_recon:
                     plot_batch_reconstruction(layer_dict, X_batch)
+                    plot_cluster_heads(layer_dict, batch_size, code_width)
+                    yout = T.nnet.softmax(ll.get_output(layer_dict['Y'], X_batch)).eval()
+                    hist(yout)
             # Learning rate decay
             if (epoch == ep_lr_decay1) or (epoch == ep_lr_decay2):
                 lr = lr / 10.0
@@ -155,11 +184,13 @@ def train(cp, dataset, labels=None):
         except KeyboardInterrupt:
             log('Caught CTRL-C, Training has been stoped.......')
             log('Saving model....')
+            plot_cluster_heads(layer_dict, batch_size, code_width)
             template = aae.make_template(layer_dict, adv_ae)
             template.save(out + prefix + '_' + num + '_' + 'model.zip')
             np.save(out + prefix + '_' + num + '_' + 'weights.npy',
                     ll.get_all_param_values(adv_ae))
             break
+
 
 from operator import attrgetter
 from argparse import ArgumentParser

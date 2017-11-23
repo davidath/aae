@@ -69,17 +69,16 @@ def build_model(cp):
     pre_merge_z = gen_z
     pre_merge_y = gen_y
     # Prepare Y for merging
-    gen_y = ll.DenseLayer(incoming=gen_y,
-                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
-                         b=None,
-                         name='PreDecY')
+    # gen_y = ll.DenseLayer(incoming=gen_y,
+    #                      num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
+    #                      b=None,
+    #                      name='PreDecY')
     # Prepare Z for merging
-    gen_z = ll.DenseLayer(incoming=gen_z,
-                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
-                         b=None,
-                         name='PreDecZ')
-    gen_y = ll.FlattenLayer(gen_y)
-    gen_z = ll.FlattenLayer(gen_z)
+    # gen_z = ll.DenseLayer(incoming=gen_z,
+                         # num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
+                         # b=None,
+                         # name='PreDecZ')
+    # ae_network = ll.ElemwiseSumLayer([gen_z, gen_y], name='MergeDec')
     ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeDec')
     # Add batch norm when flag is true
     if batch_norm_flag:
@@ -102,6 +101,7 @@ def build_model(cp):
         shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
     z_dis_in = z_dis_net = ll.ConcatLayer(
         [pre_merge_z, z_prior_inp], axis=0, name='Z_Dis_in')
+    z_dis_net = ll.GaussianNoiseLayer(incoming=z_dis_net,sigma=0.3)
     # Stack discriminator layers
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         z_dis_net = ll.DenseLayer(incoming=z_dis_net,
@@ -123,14 +123,15 @@ def build_model(cp):
         shape=(None, cp.getint('Y', 'Width')), name='py_inp')
     y_dis_in = y_dis_net = ll.ConcatLayer(
         [pre_merge_y, y_prior_inp], axis=0, name='Y_Dis_in')
+    y_dis_net = ll.GaussianNoiseLayer(incoming=y_dis_net,sigma=0.3)
     # Stack discriminator layers
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         y_dis_net = ll.DenseLayer(incoming=y_dis_net,
                                 num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
                                 name='Y_' + sect)
         # Add generator flag that will be used in backward pass
-        y_dis_net.params[y_dis_net.W].add('discriminator_z')
-        y_dis_net.params[y_dis_net.b].add('discriminator_z')
+        y_dis_net.params[y_dis_net.W].add('discriminator_y')
+        y_dis_net.params[y_dis_net.b].add('discriminator_y')
         # Add batch norm when flag is true
         if batch_norm_flag:
             y_dis_net = ll.BatchNormLayer(incoming=y_dis_net)
