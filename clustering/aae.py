@@ -33,8 +33,8 @@ def build_model(cp):
     if batch_norm_flag:
         ae_network = ll.BatchNormLayer(incoming=ae_network)
     # Dropout
-    ae_network = ll.DropoutLayer(incoming=ae_network,
-                                    p=float(cp.get('Dropout', 'rate')))
+    # ae_network = ll.DropoutLayer(incoming=ae_network,
+    #                                 p=float(cp.get('Dropout', 'rate')))
     # List of encoder sections in config file
     enc_sect = [i for i in cp.sections() if 'Encoder' in i]
     # Stack endoder layers
@@ -57,6 +57,7 @@ def build_model(cp):
     # Add generator flag that will be used in backward pass
     gen_y.params[gen_y.W].add('generator_y')
     gen_y.params[gen_y.b].add('generator_y')
+    # gen_y = ll.NonlinearityLayer(incoming=gen_y, nonlinearity=act_dict['Softmax'])
     # Latent variable Z layer also known as q(z|x)
     gen_z = ll.DenseLayer(incoming=ae_network,
                                         num_units=cp.getint('Z', 'Width'), nonlinearity=act_dict[cp.get('Z', 'Activation')],
@@ -69,20 +70,26 @@ def build_model(cp):
     pre_merge_z = gen_z
     pre_merge_y = gen_y
     # Prepare Y for merging
-    # gen_y = ll.DenseLayer(incoming=gen_y,
-    #                      num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
-    #                      b=None,
-    #                      name='PreDecY')
+    gen_y = ll.DenseLayer(incoming=gen_y,
+                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
+                         b=None,
+                         name='PreDecY')
     # Prepare Z for merging
-    # gen_z = ll.DenseLayer(incoming=gen_z,
-                         # num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
-                         # b=None,
-                         # name='PreDecZ')
+    gen_z = ll.DenseLayer(incoming=gen_z,
+                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
+                         b=None,
+                         name='PreDecZ')
+    if batch_norm_flag:
+        gen_y = ll.BatchNormLayer(incoming=gen_y)
+        gen_z = ll.BatchNormLayer(incoming=gen_z)
     # ae_network = ll.ElemwiseSumLayer([gen_z, gen_y], name='MergeDec')
     ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeDec')
+    ae_network = ll.DenseLayer(incoming=ae_network,
+                             num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
+                                        name='M')
     # Add batch norm when flag is true
-    if batch_norm_flag:
-        ae_network = ll.BatchNormLayer(incoming=ae_network)
+    # if batch_norm_flag:
+    #     ae_network = ll.BatchNormLayer(incoming=ae_network)
     # List of decoder section in config file
     dec_sect = [i for i in cp.sections() if 'Decoder' in i]
     # Stack decoder layers
@@ -90,8 +97,8 @@ def build_model(cp):
         ae_network = ll.DenseLayer(incoming=ae_network,
                                    num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
                                    name=sect)
-        if batch_norm_flag and (sect != dec_sect[-1]):
-            ae_network = ll.BatchNormLayer(incoming=ae_network)
+        # if batch_norm_flag and (sect != dec_sect[-1]):
+        #     ae_network = ll.BatchNormLayer(incoming=ae_network)
     ae_out = ae_network = ll.DenseLayer(incoming=ae_network,
                                         num_units=cp.getint(
                                             'AAE_Output', 'Width'), nonlinearity=act_dict[cp.get('AAE_Output', 'Activation')],
@@ -110,8 +117,8 @@ def build_model(cp):
         # Add generator flag that will be used in backward pass
         z_dis_net.params[z_dis_net.W].add('discriminator_z')
         z_dis_net.params[z_dis_net.b].add('discriminator_z')
-        if batch_norm_flag:
-            z_dis_net = ll.BatchNormLayer(incoming=z_dis_net)
+        # if batch_norm_flag:
+        #     z_dis_net = ll.BatchNormLayer(incoming=z_dis_net)
     # Z discriminator output
     z_dis_out = z_dis_net = ll.DenseLayer(incoming=z_dis_net,
                                       num_units=cp.getint('Dout', 'Width'), nonlinearity=act_dict[cp.get('Dout', 'Activation')],
@@ -133,8 +140,8 @@ def build_model(cp):
         y_dis_net.params[y_dis_net.W].add('discriminator_y')
         y_dis_net.params[y_dis_net.b].add('discriminator_y')
         # Add batch norm when flag is true
-        if batch_norm_flag:
-            y_dis_net = ll.BatchNormLayer(incoming=y_dis_net)
+        # if batch_norm_flag:
+        #     y_dis_net = ll.BatchNormLayer(incoming=y_dis_net)
     # Y discriminator output
     y_dis_out = y_dis_net = ll.DenseLayer(incoming=y_dis_net,
                                       num_units=cp.getint('Dout', 'Width'), nonlinearity=act_dict[cp.get('Dout', 'Activation')],
@@ -148,136 +155,18 @@ def build_model(cp):
 
 
 def load_pretrained(cp, weights):
-    # Check batch norm flag
-    batch_norm_flag = cp.getboolean('Hyperparameters', 'BatchNorm')
-    # Initialize activation functions
-    relu = lasagne.nonlinearities.rectify
-    linear = lasagne.nonlinearities.linear
-    sigmoid = lasagne.nonlinearities.sigmoid
-    softmax = lasagne.nonlinearities.softmax
-    # Make activation dictionary
-    act_dict = {'ReLU': relu, 'Linear': linear,
-        'Sigmoid': sigmoid, 'Softmax': softmax}
-    # Begin stacking layers
-    # Input
-    input_layer = ae_network = ll.InputLayer(
-        shape=(None, cp.getint('AAE_Input', 'Width')), name='AAE_Input')
-    # Add batch norm when flag is true
-    if batch_norm_flag:
-        ae_network = ll.BatchNormLayer(incoming=ae_network)
-    # Dropout
-    ae_network = ll.DropoutLayer(incoming=ae_network,
-                                    p=float(cp.get('Dropout', 'rate')))
-    # List of encoder sections in config file
-    enc_sect = [i for i in cp.sections() if 'Encoder' in i]
-    # Stack endoder layers
-    for sect in enc_sect:
-        ae_network = ll.DenseLayer(incoming=ae_network,
-                                   num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                   name=sect)
-        # Add generator flag that will be used in backward pass
-        ae_network.params[ae_network.W].add('generator_z')
-        ae_network.params[ae_network.b].add('generator_z')
-        ae_network.params[ae_network.W].add('generator_y')
-        ae_network.params[ae_network.b].add('generator_y')
-        # Add batch norm when flag is true
-        if batch_norm_flag and (sect != enc_sect[-1]):
-            ae_network = ll.BatchNormLayer(incoming=ae_network)
-    # Latent variable Y layer also known as q(y|x)
-    gen_y = ll.DenseLayer(incoming=ae_network,
-                                        num_units=cp.getint('Y', 'Width'), nonlinearity=act_dict[cp.get('Y', 'Activation')],
-                                        name='Y')
-    # Add generator flag that will be used in backward pass
-    gen_y.params[gen_y.W].add('generator_y')
-    gen_y.params[gen_y.b].add('generator_y')
-    # Latent variable Z layer also known as q(z|x)
-    gen_z = ll.DenseLayer(incoming=ae_network,
-                                        num_units=cp.getint('Z', 'Width'), nonlinearity=act_dict[cp.get('Z', 'Activation')],
-                                        name='Z')
-    # Add generator flag that will be used in backward pass
-    gen_z.params[gen_z.W].add('generator_z')
-    gen_z.params[gen_z.b].add('generator_z')
-    # ---- End of Encoder for AE, Generator Z for GAN1 and Generator Y for GAN2----
-    # Save pre-merge layers for Discriminators
-    pre_merge_z = gen_z
-    pre_merge_y = gen_y
-    # Prepare Y for merging
-    gen_y = ll.DenseLayer(incoming=gen_y,
-                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
-                         b=None,
-                         name='PreDecY')
-    # Prepare Z for merging
-    gen_z = ll.DenseLayer(incoming=gen_z,
-                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
-                         b=None,
-                         name='PreDecZ')
-    gen_y = ll.FlattenLayer(gen_y)
-    gen_z = ll.FlattenLayer(gen_z)
-    ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeDec')
-    # Add batch norm when flag is true
-    if batch_norm_flag:
-        ae_network = ll.BatchNormLayer(incoming=ae_network)
-    # List of decoder section in config file
-    dec_sect = [i for i in cp.sections() if 'Decoder' in i]
-    # Stack decoder layers
-    for sect in dec_sect:
-        ae_network = ll.DenseLayer(incoming=ae_network,
-                                   num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                   name=sect)
-        if batch_norm_flag and (sect != dec_sect[-1]):
-            ae_network = ll.BatchNormLayer(incoming=ae_network)
-    ae_out = ae_network = ll.DenseLayer(incoming=ae_network,
-                                        num_units=cp.getint(
-                                            'AAE_Output', 'Width'), nonlinearity=act_dict[cp.get('AAE_Output', 'Activation')],
-                                        name='AAE_Output')
-    # ---- End of Decoder for AE ----
-    z_prior_inp = ll.InputLayer(
-        shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
-    z_dis_in = z_dis_net = ll.ConcatLayer(
-        [pre_merge_z, z_prior_inp], axis=0, name='Z_Dis_in')
-    # Stack discriminator layers
-    for sect in [i for i in cp.sections() if 'Discriminator' in i]:
-        z_dis_net = ll.DenseLayer(incoming=z_dis_net,
-                                num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                name='Z_' + sect)
-        # Add generator flag that will be used in backward pass
-        z_dis_net.params[z_dis_net.W].add('discriminator_z')
-        z_dis_net.params[z_dis_net.b].add('discriminator_z')
-        if batch_norm_flag:
-            z_dis_net = ll.BatchNormLayer(incoming=z_dis_net)
-    # Z discriminator output
-    z_dis_out = z_dis_net = ll.DenseLayer(incoming=z_dis_net,
-                                      num_units=cp.getint('Dout', 'Width'), nonlinearity=act_dict[cp.get('Dout', 'Activation')],
-                                      name='Z_Dis_out')
-    z_dis_out.params[z_dis_out.W].add('discriminator_z')
-    z_dis_out.params[z_dis_out.b].add('discriminator_z')
-    # ---- End of Z Discriminator ----
-    y_prior_inp = ll.InputLayer(
-        shape=(None, cp.getint('Y', 'Width')), name='py_inp')
-    y_dis_in = y_dis_net = ll.ConcatLayer(
-        [pre_merge_y, y_prior_inp], axis=0, name='Y_Dis_in')
-    # Stack discriminator layers
-    for sect in [i for i in cp.sections() if 'Discriminator' in i]:
-        y_dis_net = ll.DenseLayer(incoming=y_dis_net,
-                                num_units=cp.getint(sect, 'Width'), nonlinearity=act_dict[cp.get(sect, 'Activation')],
-                                name='Y_' + sect)
-        # Add generator flag that will be used in backward pass
-        y_dis_net.params[y_dis_net.W].add('discriminator_z')
-        y_dis_net.params[y_dis_net.b].add('discriminator_z')
-        # Add batch norm when flag is true
-        if batch_norm_flag:
-            y_dis_net = ll.BatchNormLayer(incoming=y_dis_net)
-    # Y discriminator output
-    y_dis_out = y_dis_net = ll.DenseLayer(incoming=y_dis_net,
-                                      num_units=cp.getint('Dout', 'Width'), nonlinearity=act_dict[cp.get('Dout', 'Activation')],
-                                      name='Y_Dis_out')
-    y_dis_out.params[y_dis_out.W].add('discriminator_y')
-    y_dis_out.params[y_dis_out.b].add('discriminator_y')
-    # ---- End of Y Discriminator ----
-    aae = ll.get_all_layers([ae_out, z_dis_out, y_dis_out])
+    aae = build_model(cp)[1]
     ll.set_all_param_values(aae, weights)
     layer_dict = {layer.name: layer for layer in aae}
     return layer_dict, aae
+
+def copy_net(aae1, aae2):
+    batch_norm_params = ['gamma','beta','inv_std','mean']
+    idx = [pos for pos,i in enumerate(ll.get_all_params(aae2)) if i.name not in batch_norm_params]
+    no_norm_params = [ll.get_all_param_values(aae2)[i] for i in idx]
+    ll.set_all_param_values(aae1, no_norm_params)
+    layer_dict = {layer.name: layer for layer in aae1}
+    return layer_dict, aae1
 
 # Create template of our model for testing,saving, etc.
 
@@ -444,7 +333,7 @@ def y_generator_loss(layer_dict):
                             deterministic=False
                             )
     # Create generator targets, confuse discriminator
-    gen_targets = T.zeros_like(batch.shape[0])
+    gen_targets = T.zeros((batch.shape[0], 1))
     # Entropy regularization term
     gen_loss = T.mean(T.nnet.binary_crossentropy(dis_out, gen_targets))
     gen_params = ll.get_all_params(

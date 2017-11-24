@@ -170,6 +170,9 @@ def train(cp, dataset, labels=None):
                     plot_cluster_heads(layer_dict, batch_size, code_width)
                     yout = T.nnet.softmax(ll.get_output(layer_dict['Y'], X_batch)).eval()
                     hist(yout)
+            # if epoch == 20:
+            #     [layer_dict2, adv_ae2] = aae.build_model(utils.load_config('../cfg/clustering/normal2.ini'))
+            #     [layer_dict, adv_ae] = aae.copy_net(adv_ae2, adv_ae)
             # Learning rate decay
             if (epoch == ep_lr_decay1) or (epoch == ep_lr_decay2):
                 lr = lr / 10.0
