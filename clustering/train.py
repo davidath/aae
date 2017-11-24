@@ -67,6 +67,18 @@ def plot_batch_reconstruction(layer_dict, X_batch):
         log('Unable to plot grid.....')
 
 
+def plot_gen(layer_dict, X_batch, z_sample, y_sample):
+    # try:
+    x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
+    gridx = gridy = int(np.sqrt(X_batch.shape[0]))
+    recon = ll.get_output(layer_dict['AAE_Output'], inputs={layer_dict['Z']: z_sample, layer_dict['Y']: y_sample}).eval(
+    ).reshape(X_batch.shape[0], x_size, y_size)
+    utils.plot_grid(recon, gridx, gridy, x_size, y_size)
+    # except:
+    #     log('Expected square matrices for batch and sample....')
+    #     log('Unable to plot grid.....')
+
+
 def plot_cluster_heads(layer_dict, batch_size, code_width):
     head_x = ll.get_output(layer_dict['AAE_Output'],
                            inputs={layer_dict['Y']: np.identity(
@@ -78,9 +90,10 @@ def plot_cluster_heads(layer_dict, batch_size, code_width):
     ).eval().reshape(ll.get_output_shape(layer_dict['Y'])[1], 28, 28)
     utils.plot_grid(head_x, 6, 6, 28, 28)
 
+
 def hist(sample):
     import matplotlib.pyplot as plt
-    plt.hist(np.argmax(sample,axis=1))
+    plt.hist(np.argmax(sample, axis=1))
     plt.show()
 
 # Initialize neural network and train model
@@ -167,8 +180,12 @@ def train(cp, dataset, labels=None):
                 # Optional reconstruction plot during training
                 if plot_recon:
                     plot_batch_reconstruction(layer_dict, X_batch)
+                    z_sample =  aae.sample_normal(batch_size, code_width)
+                    y_sample =  aae.sample_cat(batch_size, label_width)
+                    plot_gen(layer_dict, X_batch, z_sample, y_sample)
                     plot_cluster_heads(layer_dict, batch_size, code_width)
-                    yout = T.nnet.softmax(ll.get_output(layer_dict['Y'], X_batch)).eval()
+                    yout = T.nnet.softmax(ll.get_output(
+                        layer_dict['Y'], X_batch)).eval()
                     hist(yout)
             # if epoch == 20:
             #     [layer_dict2, adv_ae2] = aae.build_model(utils.load_config('../cfg/clustering/normal2.ini'))

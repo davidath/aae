@@ -81,7 +81,7 @@ def build_model(cp):
                          name='PreDecZ')
     if batch_norm_flag:
         gen_y = ll.BatchNormLayer(incoming=gen_y)
-        gen_z = ll.BatchNormLayer(incoming=gen_z)
+        # gen_z = ll.BatchNormLayer(incoming=gen_z)
     # ae_network = ll.ElemwiseSumLayer([gen_z, gen_y], name='MergeDec')
     ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeDec')
     ae_network = ll.DenseLayer(incoming=ae_network,
