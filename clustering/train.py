@@ -79,16 +79,52 @@ def plot_gen(layer_dict, X_batch, z_sample, y_sample):
     #     log('Unable to plot grid.....')
 
 
-def plot_cluster_heads(layer_dict, batch_size, code_width):
+# def plot_cluster_heads(layer_dict, batch_size, code_width):
+#     head_x = ll.get_output(layer_dict['AAE_Output'],
+#                            inputs={layer_dict['Y']: np.identity(
+#                                ll.get_output_shape(layer_dict['Y'])[1], dtype=theano.config.floatX),
+#         layer_dict['Z']: np.zeros((ll.get_output_shape(layer_dict['Y'])[1], code_width),
+#                                   dtype=theano.config.floatX
+#                                   )
+#     }
+#     ).eval().reshape(ll.get_output_shape(layer_dict['Y'])[1], 28, 28)
+#     utils.plot_grid(head_x, 6, 6, 28, 28)
+
+def plot_cluster_heads(layer_dict, test, batch_size, code_width):
+    # import pylab
+    import matplotlib.pyplot as plt
+
+    num_clusters = ll.get_output_shape(layer_dict['Y'])[1]
+    num_plots_per_cluster = 11
+    image_width = 28
+    image_height = 28
     head_x = ll.get_output(layer_dict['AAE_Output'],
                            inputs={layer_dict['Y']: np.identity(
-                               ll.get_output_shape(layer_dict['Y'])[1], dtype=theano.config.floatX),
-        layer_dict['Z']: np.zeros((ll.get_output_shape(layer_dict['Y'])[1], code_width),
+                               num_clusters, dtype=theano.config.floatX),
+        layer_dict['Z']: np.zeros((num_clusters, code_width),
                                   dtype=theano.config.floatX
                                   )
     }
-    ).eval().reshape(ll.get_output_shape(layer_dict['Y'])[1], 28, 28)
-    utils.plot_grid(head_x, 6, 6, 28, 28)
+    ).eval().reshape(num_clusters, 28, 28)
+    head_x = (head_x + 1.0) / 2.0
+    for n in range(num_clusters):
+        plt.subplot(num_clusters, num_plots_per_cluster + 2, n * (num_plots_per_cluster + 2) + 1)
+        plt.imshow(head_x[n].reshape((image_width, image_height)), cmap=plt.cm.binary_r, interpolation="none")
+        plt.axis("off")
+    counts = [0 for i in range(num_clusters)]
+    y_batch = ll.get_output(layer_dict['Y'], test[:500].astype(np.float32)).eval()
+    labels = np.argmax(y_batch, axis=1)
+    for m in range(labels.size):
+				cluster = int(labels[m])
+				counts[cluster] += 1
+				if counts[cluster] <= num_plots_per_cluster:
+					x = (test[m] + 1.0) / 2.0
+					plt.subplot(num_clusters, num_plots_per_cluster + 2, cluster * (num_plots_per_cluster + 2) + 2 + counts[cluster])
+					plt.imshow(x.reshape((image_width, image_height)),cmap=plt.cm.binary_r, interpolation="none")
+					plt.axis("off")
+    fig = plt.gcf()
+    fig.set_size_inches(num_plots_per_cluster, num_clusters)
+    plt.show()
 
 
 def hist(sample):
@@ -100,6 +136,7 @@ def hist(sample):
 
 
 def train(cp, dataset, labels=None):
+    [test,tl] = utils.load_mnist(path='/mnt/disk1/thanasis/aae/datasets/mnist', dataset='testing')
     # IO init
     prefix = cp.get('Experiment', 'prefix')
     out = cp.get('Experiment', 'ModelOutputPath')
@@ -183,10 +220,10 @@ def train(cp, dataset, labels=None):
                     z_sample =  aae.sample_normal(batch_size, code_width)
                     y_sample =  aae.sample_cat(batch_size, label_width)
                     plot_gen(layer_dict, X_batch, z_sample, y_sample)
-                    plot_cluster_heads(layer_dict, batch_size, code_width)
+                    plot_cluster_heads(layer_dict, test, batch_size, code_width)
                     yout = T.nnet.softmax(ll.get_output(
                         layer_dict['Y'], X_batch)).eval()
-                    hist(yout)
+                    # hist(yout)
             # if epoch == 20:
             #     [layer_dict2, adv_ae2] = aae.build_model(utils.load_config('../cfg/clustering/normal2.ini'))
             #     [layer_dict, adv_ae] = aae.copy_net(adv_ae2, adv_ae)

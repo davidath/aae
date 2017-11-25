@@ -48,7 +48,7 @@ def build_model(cp):
         ae_network.params[ae_network.W].add('generator_y')
         ae_network.params[ae_network.b].add('generator_y')
         # Add batch norm when flag is true
-        if batch_norm_flag and (sect != enc_sect[-1]):
+        if batch_norm_flag: # and (sect != enc_sect[-1]):
             ae_network = ll.BatchNormLayer(incoming=ae_network)
     # Latent variable Y layer also known as q(y|x)
     gen_y = ll.DenseLayer(incoming=ae_network,
