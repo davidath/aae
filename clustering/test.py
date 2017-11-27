@@ -21,6 +21,7 @@ import time
 from tqdm import *
 import lasagne.layers as ll
 import random
+from draw_net import get_pydot_graph, draw_to_file
 
 # Logging messages such as loss,loading,etc.
 
@@ -58,44 +59,6 @@ def main(path):
         test(cp, X, labels)
 
 
-# Plot batch reconstruction
-
-def plot_batch_reconstruction(layer_dict, X_batch, out=None):
-    try:
-        x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
-        gridx = gridy = int(np.sqrt(X_batch.shape[0]))
-        recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval(
-        ).reshape(X_batch.shape[0], x_size, y_size)
-        if out:
-            utils.plot_grid(recon, gridx, gridy, x_size, y_size, out=out)
-        else:
-            utils.plot_grid(recon, gridx, gridy, x_size, y_size)
-    except:
-        log('Expected square matrices for batch and sample....')
-        log('Unable to plot grid.....')
-
-
-# Plot autoencoder generated digits
-
-def plot_generated(layer_dict, random_sample, out=None):
-    try:
-        x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
-        gridx = gridy = int(np.sqrt(random_sample.shape[0]))
-        gen_out = ll.get_output(layer_dict['AAE_Output'],
-                                inputs={layer_dict['Z']: random_sample}).eval()
-        gen_out = gen_out.reshape(random_sample.shape[0], x_size, y_size)
-        if out:
-            utils.plot_grid(gen_out, gridx, gridy, x_size, y_size, out=out)
-        else:
-            utils.plot_grid(gen_out, gridx, gridy, x_size, y_size)
-    except:
-        log('Expected square matrices....')
-        log('Unable to plot grid.....')
-
-
-# Initialize neural network and train model
-
-
 def test(cp, dataset, labels=None, fig_out=True):
     # IO init
     prefix = cp.get('Experiment', 'prefix')
@@ -109,34 +72,22 @@ def test(cp, dataset, labels=None, fig_out=True):
     template = aae.make_template(layer_dict, adv_ae)
     template.save(out + prefix + '_' + num + '_' + 'model_cpu.zip')
     fig_str = out + prefix + '_' + num + '_'
-    # Plot latent space
-    # Warning: this works in case that the latent variable/space width is 2
-    if cp.getint('Z', 'Width') == 2:
-        if fig_out:
-            utils.plot_class_space(template, dataset, labels, out=fig_str+'latent_space')
-        else:
-            utils.plot_class_space(template, dataset, labels)
     # Load batch size
     code_width = cp.getint('Z', 'Width')
     batch_size = cp.getint('Hyperparameters', 'batchsize')
     sample_dist = cp.get('Hyperparameters', 'SampleDist')
-    # Number of mnist labels
-    if labels is not None:
-        num_labels = [i[0] for i in labels]
-        num_labels = len(set(num_labels))
-    else:
-        num_labels = None
+    label_width = cp.getint('Y', 'Width')
     # Prepare mini batch slices
     slices = xrange(0, dataset.shape[0], batch_size)
     # Random idx
     rand = random.choice(slices)
     idx = slice(rand, rand + batch_size)
-    X_batch = dataset[idx]
+    X_batch = dataset[idx].astype(np.float32)
     # Plot reconstruction
     if fig_out:
-        plot_batch_reconstruction(layer_dict, X_batch, out=fig_str+'reconstruction')
+        utils.plot_batch_reconstruction(layer_dict, X_batch, out=fig_str+'reconstruction')
     else:
-        plot_batch_reconstruction(layer_dict, X_batch)
+        utils.plot_batch_reconstruction(layer_dict, X_batch)
     # Sample random
     if sample_dist == 'swiss' and num_labels is not None:
         sample = aae.sample_swiss_roll(
@@ -145,11 +96,18 @@ def test(cp, dataset, labels=None, fig_out=True):
         sample = aae.sample_uniform(batch_size, code_width)
     else:
         sample = aae.sample_normal(batch_size, code_width)
+    cat_sample = aae.sample_cat(batch_size, label_width)
     # Plot autoencoder generated digits
     if fig_out:
-        plot_generated(layer_dict, sample, out=fig_str+'generated')
+        utils.plot_generated(layer_dict, cat_sample, sample, out=fig_str+'generated')
     else:
-        plot_generated(layer_dict, sample)
+        utils.plot_generated(layer_dict, cat_sample, sample)
+    if fig_out:
+        utils.plot_cluster_heads(layer_dict, dataset[:500], batch_size, code_width, out=fig_str)
+    else:
+        utils.plot_cluster_heads(layer_dict, dataset[:500], batch_size, code_width)
+    draw_to_file(adv_ae, fig_str+'test.pdf', verbose=True)
+
 
 from operator import attrgetter
 from argparse import ArgumentParser

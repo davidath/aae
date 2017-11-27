@@ -16,9 +16,13 @@ import os
 import struct
 from array import array as pyarray
 from numpy import append, array, int8, uint8, zeros
+import lasagne.layers as ll
+import numpy as np
+import theano
 
 MNIST_PATH = '../datasets/mnist'
 JUPYTER_MNIST_PATH = '../../../datasets/mnist'
+
 
 def save(filename, *objects):
     # Save object and compress it at the same time (it can be used for multiple
@@ -102,7 +106,8 @@ def plot_grid(images, x, y, img_x, img_y, CMAP=plt.cm.binary, out=None, border=2
             y_offset = (curr_y + 1) * border + (curr_y * img_y)
             # print x_offset, y_offset
             try:
-                res[x_offset:x_offset + img_x, y_offset:y_offset + img_y] = images.next().reshape(img_x, img_y)
+                res[x_offset:x_offset + img_x, y_offset:y_offset +
+                    img_y] = images.next().reshape(img_x, img_y)
             except StopIteration:
                 pass
     fig = plt.figure()
@@ -252,3 +257,89 @@ def plot_class_space(template, dataset, labels, out=None):
         fig.savefig(out + ".png")
     else:
         plt.show()
+
+
+# Plot batch reconstruction
+
+
+def plot_batch_reconstruction(layer_dict, X_batch, out=None):
+    try:
+        x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
+        gridx = gridy = int(np.sqrt(X_batch.shape[0]))
+        recon = ll.get_output(layer_dict['AAE_Output'], X_batch).eval(
+        ).reshape(X_batch.shape[0], x_size, y_size)
+        if out:
+            plot_grid(recon, gridx, gridy, x_size, y_size, out=out)
+        else:
+            plot_grid(recon, gridx, gridy, x_size, y_size)
+    except:
+        log('Expected square matrices for batch and sample....')
+        log('Unable to plot grid.....')
+
+
+# Plot autoencoder generated digits
+
+
+def plot_generated(layer_dict, cat_sample, normal_sample, out=None):
+    try:
+        x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
+        gridx = gridy = int(np.sqrt(normal_sample.shape[0]))
+        gen_out = ll.get_output(layer_dict['AAE_Output'],
+                                inputs={layer_dict['Z']: normal_sample,
+                                        layer_dict['Y']: cat_sample}).eval()
+        gen_out = gen_out.reshape(normal_sample.shape[0], x_size, y_size)
+        if out:
+            plot_grid(gen_out, gridx, gridy, x_size, y_size, out=out)
+        else:
+            plot_grid(gen_out, gridx, gridy, x_size, y_size)
+    except:
+        log('Unable to plot grid.....')
+        log('Expected square matrices....')
+
+# Plot clustering results in the same way they do in
+# https://arxiv.org/pdf/1511.05644.pdf
+
+
+def plot_cluster_heads(layer_dict, test, batch_size, code_width, out=None):
+    num_clusters = ll.get_output_shape(layer_dict['Y'])[1]
+    num_plots_per_cluster = 11
+    try:
+        x_size = y_size = int(np.sqrt(layer_dict['AAE_Input'].shape[1]))
+        head_x = ll.get_output(layer_dict['AAE_Output'],
+                               inputs={layer_dict['Y']: np.identity(
+                                   num_clusters, dtype=theano.config.floatX),
+            layer_dict['Z']: np.zeros((num_clusters, code_width),
+                                      dtype=theano.config.floatX
+                                      )
+        }
+        ).eval().reshape(num_clusters, x_size, y_size)
+        head_x = (head_x + 1.0) / 2.0
+        for n in range(num_clusters):
+            plt.subplot(num_clusters, num_plots_per_cluster +
+                        2, n * (num_plots_per_cluster + 2) + 1)
+            plt.imshow(head_x[n].reshape((x_size, y_size)),
+                       cmap=plt.cm.binary_r, interpolation="none")
+            plt.axis("off")
+        counts = [0 for i in range(num_clusters)]
+        y_batch = ll.get_output(
+            layer_dict['Y'], test.astype(np.float32)).eval()
+        labels = np.argmax(y_batch, axis=1)
+        for m in range(labels.size):
+            cluster = int(labels[m])
+            counts[cluster] += 1
+            if counts[cluster] <= num_plots_per_cluster:
+                x = (test[m] + 1.0) / 2.0
+                plt.subplot(num_clusters, num_plots_per_cluster + 2, cluster *
+                            (num_plots_per_cluster + 2) + 2 + counts[cluster])
+                plt.imshow(x.reshape((x_size, y_size)),
+                           cmap=plt.cm.binary_r, interpolation="none")
+                plt.axis("off")
+        fig = plt.gcf()
+        fig.set_size_inches(num_plots_per_cluster, num_clusters)
+        if out:
+            fig.savefig(out + '.png')
+        else:
+            plt.show()
+    except:
+        log('Expected square matrices for batch and sample....')
+        log('Unable to plot grid.....')
