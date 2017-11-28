@@ -1,10 +1,7 @@
-"""
-   CLASS INFO
-   ----------------------------------------------------------------------------
-    Model template is enabling the use of neural network and other models
-    to be used after training.
-   ----------------------------------------------------------------------------
-"""
+###############################################################################
+# Model template is enabling the use of neural network and other models
+# to be used after training.
+###############################################################################
 
 import numpy as np
 import lasagne

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 ###############################################################################
-# Description
+# Testing script, contains dataset loading, and various plots for AAE_Clustering
 ###############################################################################
 
 import os
@@ -77,6 +77,12 @@ def test(cp, dataset, labels=None, fig_out=True):
     batch_size = cp.getint('Hyperparameters', 'batchsize')
     sample_dist = cp.get('Hyperparameters', 'SampleDist')
     label_width = cp.getint('Y', 'Width')
+    # Number of mnist labels, used for swiss roll dist
+    if labels is not None:
+        num_labels = [i[0] for i in labels]
+        num_labels = len(set(num_labels))
+    else:
+        num_labels = None
     # Prepare mini batch slices
     slices = xrange(0, dataset.shape[0], batch_size)
     # Random idx

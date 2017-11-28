@@ -1,5 +1,6 @@
 ###############################################################################
-# Description
+# Contains everything that has to do with the AAE as a model (Layer stacking,
+# loss functions, etc.)
 ###############################################################################
 
 import lasagne
@@ -26,6 +27,9 @@ def build_model(cp):
     act_dict = {'ReLU': relu, 'Linear': linear,
         'Sigmoid': sigmoid, 'Softmax': softmax}
     # Begin stacking layers
+    ###########################################################################
+    # Encoder part of AE / GAN Generator
+    ###########################################################################
     # Input
     input_layer = ae_network = ll.InputLayer(
         shape=(None, cp.getint('AAE_Input', 'Width')), name='AAE_Input')
@@ -65,6 +69,9 @@ def build_model(cp):
     gen_z.params[gen_z.W].add('generator_z')
     gen_z.params[gen_z.b].add('generator_z')
     # ---- End of Encoder for AE, Generator Z for GAN1 and Generator Y for GAN2----
+    ###########################################################################
+    # Merging latent label+style representations
+    ###########################################################################
     # Save pre-merge layers for Discriminators
     pre_merge_z = gen_z
     pre_merge_y = gen_y
@@ -82,6 +89,9 @@ def build_model(cp):
         gen_y = ll.BatchNormLayer(incoming=gen_y)
         # gen_z = ll.BatchNormLayer(incoming=gen_z)
     ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeLatent')
+    ###########################################################################
+    # Decoder part of AE
+    ###########################################################################
     ae_network = ll.DenseLayer(incoming=ae_network,
                              num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict[cp.get('Decoder1', 'Activation')],
                                         name='MergeDec')
@@ -97,6 +107,9 @@ def build_model(cp):
                                             'AAE_Output', 'Width'), nonlinearity=act_dict[cp.get('AAE_Output', 'Activation')],
                                         name='AAE_Output')
     # ---- End of Decoder for AE ----
+    ###########################################################################
+    # Z Discriminator part of GAN
+    ###########################################################################
     z_prior_inp = ll.InputLayer(
         shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
     z_dis_in = z_dis_net = ll.ConcatLayer(
@@ -117,6 +130,9 @@ def build_model(cp):
     z_dis_out.params[z_dis_out.W].add('discriminator_z')
     z_dis_out.params[z_dis_out.b].add('discriminator_z')
     # ---- End of Z Discriminator ----
+    ###########################################################################
+    # Y Discriminator part of GAN
+    ###########################################################################
     y_prior_inp = ll.InputLayer(
         shape=(None, cp.getint('Y', 'Width')), name='py_inp')
     y_dis_in = y_dis_net = ll.ConcatLayer(
@@ -373,10 +389,3 @@ def sample_cat(batchsize, num_labels):
 	for b in range(batchsize):
 		y[b, indices[b]] = 1
 	return y
-
-
-if __name__ == "__main__":
-    import utils
-    cp = utils.load_config('../cfg/clustering/normal.ini')
-    from draw_net import *
-    draw_to_file(build_model(cp)[1], 'test.pdf', verbose=True)

@@ -1,5 +1,6 @@
 ###############################################################################
-# Description
+# Contains various functions that are used throught the training,testing and
+# building process (object save/load, plots, dataset loading, etc.). 
 ###############################################################################
 
 

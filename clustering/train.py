@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 ###############################################################################
-# Description
+# Training script, contains dataset loading, training and saving of the
+# AAE_Clustering model
 ###############################################################################
 
 import os
 # Removing/Adding comment enables/disables theano GPU support
-# os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
+os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
 # Removing/Adding comment forces/stops theano CPU support, usually used for model saving
 # os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
 import numpy as np
@@ -78,7 +79,7 @@ def train(cp, dataset, labels=None):
     lr = float(cp.get('Hyperparameters', 'AElearningrate'))
     dglr = float(cp.get('Hyperparameters', 'DGlearningrate'))
     sample_dist = cp.get('Hyperparameters', 'SampleDist')
-    # Number of mnist labels
+    # Number of mnist labels, this is only used if the swiss roll dist is chosen
     if labels is not None:
         num_labels = [i[0] for i in labels]
         num_labels = len(set(num_labels))
@@ -115,11 +116,13 @@ def train(cp, dataset, labels=None):
                     sample = aae.sample_uniform(batch_size, code_width)
                 else:
                     sample = aae.sample_normal(batch_size, code_width)
+                # Gather losses
                 y_sample = aae.sample_cat(batch_size, label_width)
                 z_cross_entropy.append(z_dis_loss(X_batch, sample, dglr))
                 y_cross_entropy.append(y_dis_loss(X_batch, y_sample, dglr))
                 z_entropy.append(z_gen_loss(X_batch, dglr))
                 y_entropy.append(y_gen_loss(X_batch, dglr))
+            # Print batch mean loss
             reconstruct = np.asarray(reconstruct)
             z_cross_entropy = np.asarray(z_cross_entropy)
             y_cross_entropy = np.asarray(y_cross_entropy)
@@ -156,7 +159,6 @@ def train(cp, dataset, labels=None):
         except KeyboardInterrupt:
             log('Caught CTRL-C, Training has been stoped.......')
             log('Saving model....')
-            plot_cluster_heads(layer_dict, batch_size, code_width)
             template = aae.make_template(layer_dict, adv_ae)
             template.save(out + prefix + '_' + num + '_' + 'model.zip')
             np.save(out + prefix + '_' + num + '_' + 'weights.npy',

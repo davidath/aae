@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 ###############################################################################
-# Description
+# Training script, contains dataset loading, training and saving of the
+# AAE_default model
 ###############################################################################
 
 import os
@@ -74,7 +75,7 @@ def train(cp, dataset, labels=None):
     prefix = cp.get('Experiment', 'prefix')
     out = cp.get('Experiment', 'ModelOutputPath')
     num = cp.get('Experiment', 'Enumber')
-    # Building/Stacking layers
+    # Building model / Stacking layers
     [layer_dict, adv_ae] = aae.build_model(cp)
     # Pre-train inits
     code_width = cp.getint('Z', 'Width')
@@ -86,7 +87,7 @@ def train(cp, dataset, labels=None):
     dglr = float(cp.get('Hyperparameters', 'DGlearningrate'))
     plot_recon = cp.getboolean('Experiment', 'PlotReconstruction')
     sample_dist = cp.get('Hyperparameters', 'SampleDist')
-    # Number of mnist labels
+    # Number of mnist labels, this is only used if the swiss roll dist is chosen
     if labels is not None:
         num_labels = [i[0] for i in labels]
         num_labels = len(set(num_labels))
@@ -111,14 +112,17 @@ def train(cp, dataset, labels=None):
                 idx = slice(row, row + batch_size)
                 X_batch = dataset[idx]
                 reconstruct.append(recon_loss(X_batch, lr))
-                # Sample from normal distribution for prior p(z)
+                # Sample from swiss roll distribution as prior p(z)
                 if sample_dist == 'swiss' and num_labels is not None:
                     sample = aae.sample_swiss_roll(
                         batch_size, code_width, num_labels)
+                # Sample from uniform distribution as prior p(z)
                 elif sample_dist == 'uniform':
                     sample = aae.sample_uniform(batch_size, code_width)
+                # Sample from swiss_roll distribution as prior p(z)
                 else:
                     sample = aae.sample_normal(batch_size, code_width)
+                # Gather loss for each mini-batch
                 cross_entropy.append(
                     dis_loss(X_batch, sample, dglr))
                 entropy.append(gen_loss(X_batch, dglr))
