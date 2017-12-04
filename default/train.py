@@ -95,8 +95,11 @@ def train(cp, dataset, labels=None):
         num_labels = None
     # Get objective functions
     recon_loss = aae.reconstruction_loss(layer_dict)
-    dis_loss = aae.discriminator_loss(layer_dict)
-    gen_loss = aae.generator_loss(layer_dict)
+    d_z_loss = aae.d_z_discriminate(layer_dict)
+    d_sample_loss = aae.d_sample_discriminate(layer_dict)
+    g_z_loss = aae.g_z_discriminate(layer_dict)
+    fake = np.zeros((batch_size, 1)).astype(np.float32)
+    real = np.ones((batch_size, 1)).astype(np.float32)
     for epoch in xrange(max_epochs):
         # Save on CTRL-C
         try:
@@ -123,14 +126,14 @@ def train(cp, dataset, labels=None):
                 else:
                     sample = aae.sample_normal(batch_size, code_width)
                 # Gather loss for each mini-batch
-                cross_entropy.append(
-                    dis_loss(X_batch, sample, dglr))
-                entropy.append(gen_loss(X_batch, dglr))
+                cross_entropy.append(d_z_loss(X_batch, fake, dglr))
+                d_sample_loss(sample, real, dglr)
+                entropy.append(g_z_loss(X_batch, real, dglr))
             reconstruct = np.asarray(reconstruct)
             cross_entropy = np.asarray(cross_entropy)
             entropy = np.asarray(entropy)
             # Train loss messages and model saves
-            if epoch % 5 == 0:
+            if epoch % 1 == 0:
                 log(str(epoch) + ' ' + str(np.mean(reconstruct)),
                     label='AAE-LRecon')
                 log(str(epoch) + ' ' + str(np.mean(cross_entropy)),
@@ -153,8 +156,8 @@ def train(cp, dataset, labels=None):
                         ll.get_all_param_values(adv_ae))
         # Save on CTRl-C
         except KeyboardInterrupt:
-            log('Caught CTRL-C, Training has been stoped.......')
-            log('Saving model....')
+            # log('Caught CTRL-C, Training has been stoped.......')
+            # log('Saving model....')
             template = aae.make_template(layer_dict, adv_ae)
             template.save(out + prefix + '_' + num + '_' + 'model.zip')
             np.save(out + prefix + '_' + num + '_' + 'weights.npy',
