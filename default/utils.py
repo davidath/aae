@@ -1,6 +1,6 @@
 ###############################################################################
 # Contains various functions that are used throught the training,testing and
-# building process (object save/load, plots, dataset loading, etc.). 
+# building process (object save/load, plots, dataset loading, etc.).
 ###############################################################################
 
 
@@ -170,6 +170,7 @@ def log(s, label='INFO'):
 
 
 def load_data_train(cp):
+    np.random.seed(2017)
     log('Loading data........')
     out = cp.get('Experiment', 'ModelOutputPath')
     num = cp.get('Experiment', 'Enumber')
@@ -187,6 +188,7 @@ def load_data_train(cp):
         # Shuffle the dataset for training then use the same permutation for
         # the labels.
         p = np.random.permutation(X1.shape[0])
+        print p[:5]
         X = X1[p].astype(np.float32)
         labels = labels1[p]
         prefix = cp.get('Experiment', 'prefix')
