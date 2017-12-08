@@ -14,6 +14,9 @@ import utils
 from modeltemplate import Model
 from theano.tensor.shared_randomstreams import RandomStreams
 
+
+lasagne.random.set_rng(np.random.RandomState(2017))
+
 # Stacking layers from config file
 
 
@@ -38,6 +41,7 @@ def build_model(cp):
         # Add generator flag that will be used in backward pass
         ae_network.params[ae_network.W].add('generator')
         ae_network.params[ae_network.b].add('generator')
+    print ae_network.W.eval()
     # Latent variable Z layer also known as q(z|x)
     ae_enc = ae_network = ll.DenseLayer(incoming=ae_network,
                                         num_units=cp.getint('Z', 'Width'), nonlinearity=act_dict[cp.get('Z', 'Activation')],
