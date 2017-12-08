@@ -7,7 +7,7 @@
 
 import os
 # Removing/Adding comment enables/disables theano GPU support
-os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32,blas.ldflags=-lopenblas'
+os.environ['THEANO_FLAGS'] = 'mode=FAST_RUN,device=cuda,floatX=float32'
 # Removing/Adding comment forces/stops theano CPU support, usually used for model saving
 # os.environ['THEANO_FLAGS'] = 'device=cpu,force_device=True'
 import numpy as np
@@ -126,8 +126,8 @@ def train(cp, dataset, labels=None):
                 else:
                     sample = aae.sample_normal(batch_size, code_width)
                 # Gather loss for each mini-batch
-                cross_entropy.append(d_z_loss(X_batch, fake, dglr))
-                d_sample_loss(sample, real, dglr)
+                d_l = d_z_loss(X_batch, fake, dglr)+d_sample_loss(sample, real, dglr)
+                cross_entropy.append(d_l / 2.0)
                 entropy.append(g_z_loss(X_batch, real, dglr))
             reconstruct = np.asarray(reconstruct)
             cross_entropy = np.asarray(cross_entropy)

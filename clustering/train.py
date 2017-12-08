@@ -87,10 +87,14 @@ def train(cp, dataset, labels=None):
         num_labels = None
     # Get objective functions
     recon_loss = aae.reconstruction_loss(layer_dict)
-    z_dis_loss = aae.z_discriminator_loss(layer_dict)
-    y_dis_loss = aae.y_discriminator_loss(layer_dict)
-    z_gen_loss = aae.z_generator_loss(layer_dict)
-    y_gen_loss = aae.y_generator_loss(layer_dict)
+    d_z_discriminate = aae.d_z_discriminate(layer_dict)
+    g_z_discriminate = aae.g_z_discriminate(layer_dict)
+    pz_discriminate = aae.pz_discriminate(layer_dict)
+    d_y_discriminate = aae.d_y_discriminate(layer_dict)
+    g_y_discriminate = aae.g_y_discriminate(layer_dict)
+    py_discriminate = aae.py_discriminate(layer_dict)
+    fake = np.zeros((batch_size, 1)).astype(np.float32)
+    real = np.ones((batch_size, 1)).astype(np.float32)
     for epoch in xrange(max_epochs):
         # Save on CTRL-C
         try:
@@ -98,10 +102,10 @@ def train(cp, dataset, labels=None):
             tstart = time.time()
             # Gather losses
             reconstruct = []
-            z_cross_entropy = []
-            y_cross_entropy = []
-            z_entropy = []
-            y_entropy = []
+            z_dis_loss = []
+            y_dis_loss = []
+            z_gen_loss = []
+            y_gen_loss = []
             # Mini batch loop
             for row in tqdm(xrange(0, dataset.shape[0], batch_size), ascii=True):
                 # Slice dataset
@@ -118,33 +122,39 @@ def train(cp, dataset, labels=None):
                     sample = aae.sample_normal(batch_size, code_width)
                 # Gather losses
                 y_sample = aae.sample_cat(batch_size, label_width)
-                z_cross_entropy.append(z_dis_loss(X_batch, sample, dglr))
-                y_cross_entropy.append(y_dis_loss(X_batch, y_sample, dglr))
-                z_entropy.append(z_gen_loss(X_batch, dglr))
-                y_entropy.append(y_gen_loss(X_batch, dglr))
+                z_d = d_z_discriminate(X_batch, fake, dglr) + pz_discriminate(sample, real, dglr)
+                y_d = d_y_discriminate(X_batch, fake, dglr) + py_discriminate(y_sample, real, dglr)
+                z_g = g_z_discriminate(X_batch, real, dglr)
+                y_g = g_y_discriminate(X_batch, real, dglr)
+                z_d = z_d / 2.0
+                y_d = y_d / 2.0
+                z_dis_loss.append(z_d)
+                y_dis_loss.append(y_d)
+                z_gen_loss.append(z_g)
+                y_gen_loss.append(y_g)
             # Print batch mean loss
             reconstruct = np.asarray(reconstruct)
-            z_cross_entropy = np.asarray(z_cross_entropy)
-            y_cross_entropy = np.asarray(y_cross_entropy)
-            z_entropy = np.asarray(z_entropy)
-            y_entropy = np.asarray(y_entropy)
+            z_dis_loss = np.asarray(z_dis_loss)
+            y_dis_loss = np.asarray(y_dis_loss)
+            z_gen_loss = np.asarray(z_gen_loss)
+            y_gen_loss = np.asarray(y_gen_loss)
             # Train loss messages and model saves
-            if epoch % 5 == 0:
+            if epoch % 1 == 0:
                 log(str(epoch) + ' ' + str(np.mean(reconstruct)),
                     label='AAE-LRecon')
-                log(str(epoch) + ' ' + str(np.mean(z_cross_entropy)),
+                log(str(epoch) + ' ' + str(np.mean(z_dis_loss)),
                     label='AAE-Z-Cross')
-                log(str(epoch) + ' ' + str(np.mean(y_cross_entropy)),
+                log(str(epoch) + ' ' + str(np.mean(y_dis_loss)),
                     label='AAE-Y-Cross')
-                log(str(epoch) + ' ' + str(np.mean(z_entropy)),
+                log(str(epoch) + ' ' + str(np.mean(z_gen_loss)),
                     label='AAE-Z-Entr')
-                log(str(epoch) + ' ' + str(np.mean(y_entropy)),
+                log(str(epoch) + ' ' + str(np.mean(y_gen_loss)),
                     label='AAE-Y-Entr')
                 timing(tstart, time.time())
                 # Optional reconstruction plot during training
                 if plot_recon:
                     utils.plot_cluster_heads(
-                        layer_dict, test, batch_size, code_width)
+                        layer_dict, test, batch_size, code_width, out=str(epoch))
             # Learning rate decay
             if (epoch == ep_lr_decay1) or (epoch == ep_lr_decay2):
                 lr = lr / 10.0
@@ -157,8 +167,8 @@ def train(cp, dataset, labels=None):
                         ll.get_all_param_values(adv_ae))
         # Save on CTRl-C
         except KeyboardInterrupt:
-            log('Caught CTRL-C, Training has been stoped.......')
-            log('Saving model....')
+            # log('Caught CTRL-C, Training has been stoped.......')
+            # log('Saving model....')
             template = aae.make_template(layer_dict, adv_ae)
             template.save(out + prefix + '_' + num + '_' + 'model.zip')
             np.save(out + prefix + '_' + num + '_' + 'weights.npy',

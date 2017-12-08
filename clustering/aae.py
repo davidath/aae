@@ -73,21 +73,21 @@ def build_model(cp):
     # Merging latent label+style representations
     ###########################################################################
     # Save pre-merge layers for Discriminators
-    pre_merge_z = gen_z
-    pre_merge_y = gen_y
-    # Prepare Y for merging
-    gen_y = ll.DenseLayer(incoming=gen_y,
-                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
-                         b=None,
-                         name='PreDecY')
-    # Prepare Z for merging
-    gen_z = ll.DenseLayer(incoming=gen_z,
-                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
-                         b=None,
-                         name='PreDecZ')
     if batch_norm_flag:
         gen_y = ll.BatchNormLayer(incoming=gen_y)
-        # gen_z = ll.BatchNormLayer(incoming=gen_z)
+        gen_z = ll.BatchNormLayer(incoming=gen_z)
+    z_dis_net = gen_z
+    y_dis_net = gen_y
+    # Prepare Y for merging
+    # gen_y = ll.DenseLayer(incoming=gen_y,
+    #                      num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
+    #                      b=None,
+    #                      name='PreDecY')
+    # # Prepare Z for merging
+    # gen_z = ll.DenseLayer(incoming=gen_z,
+    #                      num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
+    #                      b=None,
+    #                      name='PreDecZ')
     ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeLatent')
     ###########################################################################
     # Decoder part of AE
@@ -110,11 +110,11 @@ def build_model(cp):
     ###########################################################################
     # Z Discriminator part of GAN
     ###########################################################################
-    z_prior_inp = ll.InputLayer(
-        shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
-    z_dis_in = z_dis_net = ll.ConcatLayer(
-        [pre_merge_z, z_prior_inp], axis=0, name='Z_Dis_in')
-    z_dis_net = ll.GaussianNoiseLayer(incoming=z_dis_net,sigma=0.3)
+    # z_prior_inp = ll.InputLayer(
+    #     shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
+    # z_dis_in = z_dis_net = ll.ConcatLayer(
+    #     [pre_merge_z, z_prior_inp], axis=0, name='Z_Dis_in')
+    # z_dis_net = ll.GaussianNoiseLayer(incoming=z_dis_net,sigma=0.3)
     # Stack discriminator layers
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         z_dis_net = ll.DenseLayer(incoming=z_dis_net,
@@ -133,11 +133,11 @@ def build_model(cp):
     ###########################################################################
     # Y Discriminator part of GAN
     ###########################################################################
-    y_prior_inp = ll.InputLayer(
-        shape=(None, cp.getint('Y', 'Width')), name='py_inp')
-    y_dis_in = y_dis_net = ll.ConcatLayer(
-        [pre_merge_y, y_prior_inp], axis=0, name='Y_Dis_in')
-    y_dis_net = ll.GaussianNoiseLayer(incoming=y_dis_net,sigma=0.3)
+    # y_prior_inp = ll.InputLayer(
+    #     shape=(None, cp.getint('Y', 'Width')), name='py_inp')
+    # y_dis_in = y_dis_net = ll.ConcatLayer(
+    #     [pre_merge_y, y_prior_inp], axis=0, name='Y_Dis_in')
+    # y_dis_net = ll.GaussianNoiseLayer(incoming=y_dis_net,sigma=0.3)
     # Stack discriminator layers
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         y_dis_net = ll.DenseLayer(incoming=y_dis_net,
@@ -202,27 +202,19 @@ def reconstruction_loss(layer_dict):
 # Create discriminator objective function also known as the cross entropy between prior
 # distribution p(z) and posterior estimate distribution q(z|x)
 
-def z_discriminator_loss(layer_dict):
+def d_z_discriminate(layer_dict):
     # Symbolic var for learning rate
     dglr = T.scalar('lr')
     # Symbolic input variable
     input_var = T.fmatrix('input_var')
     # Symbolic mini batch variable
     batch = T.fmatrix('batch')
-    # Symbolic samples from p(z) prior
-    pz = T.fmatrix('pz')
-    # Symbolic batch for p(z)
-    pz_batch = T.fmatrix('pz_batch')
+    dis_targets = T.fmatrix('dis_targets')
     # Get discriminator output
+    gen_out = ll.get_output(layer_dict['Z'], input_var, deterministic=False)
     dis_out = ll.get_output(layer_dict['Z_Dis_out'],
-                            inputs={layer_dict['pz_inp']: pz,
-                                    layer_dict['AAE_Input']: input_var},
+                            inputs={layer_dict['Z']: gen_out},
                             deterministic=False)
-    # Fake/Real (0/1) labels for discriminator loss
-    dis_targets = T.vertical_stack(
-        T.ones((batch.shape[0], 1)),
-        T.zeros((pz_batch.shape[0], 1))
-    )
     # Cross entropy regularization term
     dis_loss = T.mean(T.nnet.binary_crossentropy(dis_out, dis_targets))
     dis_params = ll.get_all_params(layer_dict['Z_Dis_out'], trainable=True,
@@ -231,38 +223,89 @@ def z_discriminator_loss(layer_dict):
         dis_loss, dis_params, learning_rate=dglr, momentum=0.1)
     # Discriminator loss aka Cross Entropy term
     dis_func = theano.function(inputs=[theano.In(batch),
-                                       theano.In(pz_batch), dglr],
+                                       theano.In(dis_targets), dglr],
                                outputs=dis_loss, updates=dis_updates,
-                               givens={input_var: batch, pz: pz_batch}
+                               givens={input_var: batch}
                                )
     return dis_func
 
-# Create discriminator objective function also known as the cross entropy between prior
-# distribution p(y) and posterior estimate distribution q(y|x)
 
-
-
-def y_discriminator_loss(layer_dict):
+def pz_discriminate(layer_dict):
     # Symbolic var for learning rate
     dglr = T.scalar('lr')
     # Symbolic input variable
     input_var = T.fmatrix('input_var')
     # Symbolic mini batch variable
     batch = T.fmatrix('batch')
-    # Symbolic samples from p(z) prior
-    py = T.fmatrix('py')
-    # Symbolic batch for p(z)
-    py_batch = T.fmatrix('py_batch')
+    dis_targets = T.fmatrix('dis_targets')
     # Get discriminator output
-    dis_out = ll.get_output(layer_dict['Y_Dis_out'],
-                            inputs={layer_dict['py_inp']: py,
-                                    layer_dict['AAE_Input']: input_var},
+    dis_out = ll.get_output(layer_dict['Z_Dis_out'],
+                            inputs={layer_dict['Z']: input_var},
                             deterministic=False)
-    # Fake/Real (0/1) labels for discriminator loss
-    dis_targets = T.vertical_stack(
-        T.ones((batch.shape[0], 1)),
-        T.zeros((py_batch.shape[0], 1))
-    )
+    # Cross entropy regularization term
+    dis_loss = T.mean(T.nnet.binary_crossentropy(dis_out, dis_targets))
+    dis_params = ll.get_all_params(layer_dict['Z_Dis_out'], trainable=True,
+                                   discriminator_z=True)
+    dis_updates = lasagne.updates.nesterov_momentum(
+        dis_loss, dis_params, learning_rate=dglr, momentum=0.1)
+    # Discriminator loss aka Cross Entropy term
+    dis_func = theano.function(inputs=[theano.In(batch),
+                                       theano.In(dis_targets), dglr],
+                               outputs=dis_loss, updates=dis_updates,
+                               givens={input_var: batch}
+                               )
+    return dis_func
+
+
+# Create generator objective function also known as the entropy of the posterior
+# estimate distribution q(z|x)
+
+def g_z_discriminate(layer_dict):
+    # Symbolic var for learning rate
+    dglr = T.scalar('lr')
+    # Symbolic input variable
+    input_var = T.fmatrix('input_var')
+    # Symbolic mini batch variable
+    batch = T.fmatrix('batch')
+    gen_targets = T.fmatrix('gen_targets')
+    # Get generator output
+    gen_out = ll.get_output(layer_dict['Z'], input_var, deterministic=False)
+    # Pass generator output to discriminator input
+    dis_out = ll.get_output(layer_dict['Z_Dis_out'],
+                            inputs={layer_dict['Z']: gen_out},
+                            deterministic=False
+                            )
+    # Entropy regularization term
+    gen_loss = T.mean(T.nnet.binary_crossentropy(dis_out, gen_targets))
+    gen_params = ll.get_all_params(
+        layer_dict['Z_Dis_out'], trainable=True, generator_z=True)
+    gen_updates = lasagne.updates.nesterov_momentum(
+        gen_loss, gen_params, learning_rate=dglr, momentum=0.1)
+    # Generator loss aka Entropy term
+    gen_func = theano.function(inputs=[theano.In(batch), theano.In(gen_targets), dglr],
+                               outputs=gen_loss, updates=gen_updates,
+                               givens={input_var: batch}
+                               )
+    return gen_func
+
+
+
+# Create discriminator objective function also known as the cross entropy between prior
+# distribution p(z) and posterior estimate distribution q(z|x)
+
+def d_y_discriminate(layer_dict):
+    # Symbolic var for learning rate
+    dglr = T.scalar('lr')
+    # Symbolic input variable
+    input_var = T.fmatrix('input_var')
+    # Symbolic mini batch variable
+    batch = T.fmatrix('batch')
+    dis_targets = T.fmatrix('dis_targets')
+    # Get discriminator output
+    gen_out = ll.get_output(layer_dict['Y'], input_var, deterministic=False)
+    dis_out = ll.get_output(layer_dict['Y_Dis_out'],
+                            inputs={layer_dict['Y']: gen_out},
+                            deterministic=False)
     # Cross entropy regularization term
     dis_loss = T.mean(T.nnet.binary_crossentropy(dis_out, dis_targets))
     dis_params = ll.get_all_params(layer_dict['Y_Dis_out'], trainable=True,
@@ -271,9 +314,36 @@ def y_discriminator_loss(layer_dict):
         dis_loss, dis_params, learning_rate=dglr, momentum=0.1)
     # Discriminator loss aka Cross Entropy term
     dis_func = theano.function(inputs=[theano.In(batch),
-                                       theano.In(py_batch), dglr],
+                                       theano.In(dis_targets), dglr],
                                outputs=dis_loss, updates=dis_updates,
-                               givens={input_var: batch, py: py_batch}
+                               givens={input_var: batch}
+                               )
+    return dis_func
+
+
+def py_discriminate(layer_dict):
+    # Symbolic var for learning rate
+    dglr = T.scalar('lr')
+    # Symbolic input variable
+    input_var = T.fmatrix('input_var')
+    # Symbolic mini batch variable
+    batch = T.fmatrix('batch')
+    dis_targets = T.fmatrix('dis_targets')
+    # Get discriminator output
+    dis_out = ll.get_output(layer_dict['Y_Dis_out'],
+                            inputs={layer_dict['Y']: input_var},
+                            deterministic=False)
+    # Cross entropy regularization term
+    dis_loss = T.mean(T.nnet.binary_crossentropy(dis_out, dis_targets))
+    dis_params = ll.get_all_params(layer_dict['Y_Dis_out'], trainable=True,
+                                   discriminator_y=True)
+    dis_updates = lasagne.updates.nesterov_momentum(
+        dis_loss, dis_params, learning_rate=dglr, momentum=0.1)
+    # Discriminator loss aka Cross Entropy term
+    dis_func = theano.function(inputs=[theano.In(batch),
+                                       theano.In(dis_targets), dglr],
+                               outputs=dis_loss, updates=dis_updates,
+                               givens={input_var: batch}
                                )
     return dis_func
 
@@ -281,55 +351,21 @@ def y_discriminator_loss(layer_dict):
 # Create generator objective function also known as the entropy of the posterior
 # estimate distribution q(z|x)
 
-def z_generator_loss(layer_dict):
+def g_y_discriminate(layer_dict):
     # Symbolic var for learning rate
     dglr = T.scalar('lr')
     # Symbolic input variable
     input_var = T.fmatrix('input_var')
     # Symbolic mini batch variable
     batch = T.fmatrix('batch')
-    # Get generator output
-    gen_out = ll.get_output(layer_dict['Z'], input_var, deterministic=False)
-    # Pass generator output to discriminator input
-    dis_out = ll.get_output(layer_dict['Z_Dis_out'],
-                            inputs={layer_dict['Z_Dis_in']: gen_out},
-                            deterministic=False
-                            )
-    # Create generator targets, confuse discriminator
-    gen_targets = T.zeros_like(batch.shape[0])
-    # Entropy regularization term
-    gen_loss = T.mean(T.nnet.binary_crossentropy(dis_out, gen_targets))
-    gen_params = ll.get_all_params(
-        layer_dict['Z_Dis_out'], trainable=True, generator_z=True)
-    gen_updates = lasagne.updates.nesterov_momentum(
-        gen_loss, gen_params, learning_rate=dglr, momentum=0.1)
-    # Generator loss aka Entropy term
-    gen_func = theano.function(inputs=[theano.In(batch), dglr],
-                               outputs=gen_loss, updates=gen_updates,
-                               givens={input_var: batch}
-                               )
-    return gen_func
-
-
-# Create generator objective function also known as the entropy of the posterior
-# estimate distribution q(y|x)
-
-def y_generator_loss(layer_dict):
-    # Symbolic var for learning rate
-    dglr = T.scalar('lr')
-    # Symbolic input variable
-    input_var = T.fmatrix('input_var')
-    # Symbolic mini batch variable
-    batch = T.fmatrix('batch')
+    gen_targets = T.fmatrix('gen_targets')
     # Get generator output
     gen_out = ll.get_output(layer_dict['Y'], input_var, deterministic=False)
     # Pass generator output to discriminator input
     dis_out = ll.get_output(layer_dict['Y_Dis_out'],
-                            inputs={layer_dict['Y_Dis_in']: gen_out},
+                            inputs={layer_dict['Y']: gen_out},
                             deterministic=False
                             )
-    # Create generator targets, confuse discriminator
-    gen_targets = T.zeros((batch.shape[0], 1))
     # Entropy regularization term
     gen_loss = T.mean(T.nnet.binary_crossentropy(dis_out, gen_targets))
     gen_params = ll.get_all_params(
@@ -337,7 +373,7 @@ def y_generator_loss(layer_dict):
     gen_updates = lasagne.updates.nesterov_momentum(
         gen_loss, gen_params, learning_rate=dglr, momentum=0.1)
     # Generator loss aka Entropy term
-    gen_func = theano.function(inputs=[theano.In(batch), dglr],
+    gen_func = theano.function(inputs=[theano.In(batch), theano.In(gen_targets), dglr],
                                outputs=gen_loss, updates=gen_updates,
                                givens={input_var: batch}
                                )
@@ -389,3 +425,9 @@ def sample_cat(batchsize, num_labels):
 	for b in range(batchsize):
 		y[b, indices[b]] = 1
 	return y
+
+if __name__ == "__main__":
+    import utils
+    cp = utils.load_config('../cfg/clustering/normal.ini')
+    from draw_net import *
+    draw_to_file(build_model(cp)[1], 'test.pdf', verbose=True)

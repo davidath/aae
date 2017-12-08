@@ -15,8 +15,8 @@ class Model(object):
       self._z_encoder_layer = layer_dict['Z']
       self._y_encoder_layer = layer_dict['Y']
       self._decoder_layer = layer_dict['AAE_Output']
-      self._z_discriminator_input = layer_dict['Z_Dis_in']
-      self._y_discriminator_input = layer_dict['Y_Dis_in']
+    #   self._z_discriminator_input = layer_dict['Z_Dis_in']
+    #   self._y_discriminator_input = layer_dict['Y_Dis_in']
       self._z_discriminator_output = layer_dict['Z_Dis_out']
       self._y_discriminator_output = layer_dict['Y_Dis_out']
       self._network = aae

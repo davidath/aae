@@ -38,6 +38,9 @@ def main():
             elif 'LEntr' in l:
                 xentr.append(toks[args.ycol - 1])
             ys.append(int(toks[args.xcol - 1]))
+    xrecon = [float(x) for x in xrecon]
+    xcross = [float(x) for x in xcross]
+    xentr = [float(x) for x in xentr]
     ys = sorted(list(set(ys)))
     plt.subplot(311)
     plt.title('Reconstruction loss')
