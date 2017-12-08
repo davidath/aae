@@ -73,21 +73,21 @@ def build_model(cp):
     # Merging latent label+style representations
     ###########################################################################
     # Save pre-merge layers for Discriminators
-    if batch_norm_flag:
-        gen_y = ll.BatchNormLayer(incoming=gen_y)
-        gen_z = ll.BatchNormLayer(incoming=gen_z)
     z_dis_net = gen_z
     y_dis_net = gen_y
     # Prepare Y for merging
-    # gen_y = ll.DenseLayer(incoming=gen_y,
-    #                      num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
-    #                      b=None,
-    #                      name='PreDecY')
-    # # Prepare Z for merging
-    # gen_z = ll.DenseLayer(incoming=gen_z,
-    #                      num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
-    #                      b=None,
-    #                      name='PreDecZ')
+    gen_y = ll.DenseLayer(incoming=gen_y,
+                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
+                         b=None,
+                         name='PreDecY')
+    # Prepare Z for merging
+    gen_z = ll.DenseLayer(incoming=gen_z,
+                         num_units=cp.getint('Decoder1', 'Width'), nonlinearity=act_dict['Linear'],
+                         b=None,
+                         name='PreDecZ')
+    if batch_norm_flag:
+         gen_y = ll.BatchNormLayer(incoming=gen_y)
+         gen_z = ll.BatchNormLayer(incoming=gen_z)
     ae_network = ll.ConcatLayer([gen_z, gen_y], name='MergeLatent')
     ###########################################################################
     # Decoder part of AE
@@ -114,7 +114,7 @@ def build_model(cp):
     #     shape=(None, cp.getint('Z', 'Width')), name='pz_inp')
     # z_dis_in = z_dis_net = ll.ConcatLayer(
     #     [pre_merge_z, z_prior_inp], axis=0, name='Z_Dis_in')
-    # z_dis_net = ll.GaussianNoiseLayer(incoming=z_dis_net,sigma=0.3)
+    z_dis_net = ll.GaussianNoiseLayer(incoming=z_dis_net,sigma=0.3)
     # Stack discriminator layers
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         z_dis_net = ll.DenseLayer(incoming=z_dis_net,
@@ -137,7 +137,7 @@ def build_model(cp):
     #     shape=(None, cp.getint('Y', 'Width')), name='py_inp')
     # y_dis_in = y_dis_net = ll.ConcatLayer(
     #     [pre_merge_y, y_prior_inp], axis=0, name='Y_Dis_in')
-    # y_dis_net = ll.GaussianNoiseLayer(incoming=y_dis_net,sigma=0.3)
+    y_dis_net = ll.GaussianNoiseLayer(incoming=y_dis_net,sigma=0.3)
     # Stack discriminator layers
     for sect in [i for i in cp.sections() if 'Discriminator' in i]:
         y_dis_net = ll.DenseLayer(incoming=y_dis_net,

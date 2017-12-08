@@ -153,8 +153,9 @@ def train(cp, dataset, labels=None):
                 timing(tstart, time.time())
                 # Optional reconstruction plot during training
                 if plot_recon:
-                    utils.plot_cluster_heads(
-                        layer_dict, test, batch_size, code_width, out=str(epoch))
+                    if epoch % 10 == 0:
+                        utils.plot_cluster_heads(
+                              layer_dict, test, batch_size, code_width, out=str(epoch))
             # Learning rate decay
             if (epoch == ep_lr_decay1) or (epoch == ep_lr_decay2):
                 lr = lr / 10.0
